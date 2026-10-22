@@ -38,8 +38,6 @@
     WM.open('roster', {
       title: 'Roster',
       icon: 'roster',
-      width: 1080,
-      height: 660,
       state: { level: 'V', group: 'all', pos: 'ALL', sort: { key: 'ovr', dir: 'desc' } },
       render(body, w) {
         const st = App.state;
@@ -88,6 +86,7 @@
           { key: 'spd', label: 'Spd', value: (p) => p.a.spd, cls: 'num r' },
           { key: 'str', label: 'Str', value: (p) => p.a.str, cls: 'num r' },
           { key: 'awr', label: 'Awr', value: (p) => p.a.awr, cls: 'num r' },
+          { key: 'rec', label: 'Recruit', value: (p) => { const i = Season.recruitInfo(st, p); return i ? 10000 - i.rank - (i.classYear - st.year) * 1000 : 0; }, render: (p) => { const i = Season.recruitInfo(st, p); return i ? h('span', { class: 'nowrap' }, stars(i.stars), ' #' + i.rank) : h('span', { class: 'dim' }, '—'); } },
           { key: 'role', label: 'Starting', value: (p) => (starters[p.id] ? 1 : 0), render: (p) => (starters[p.id] ? h('span', { class: 'tag team' }, starters[p.id]) : h('span', { class: 'dim' }, '—')) },
           { key: 'status', label: 'Status', value: (p) => p.injury, render: (p) => (p.injury > 0 ? h('span', { class: 'tag bad' }, 'INJ ' + p.injury + 'w') : h('span', { class: 'tag good' }, 'Healthy')) },
           { key: 'level', label: 'Team', value: (p) => Players.LEVELS.indexOf(p.level), render: (p) => levelSelect(st, p), sortable: true },
@@ -113,9 +112,6 @@
     WM.open('player:' + id, {
       title: 'Player',
       icon: 'player',
-      width: 780,
-      height: 640,
-      layoutKey: 'player',
       state: { tab: 'ratings' },
       render(body, w) {
         const st = App.state;
@@ -128,6 +124,7 @@
         const o = Players.ovr(p);
         const best = Players.bestPosition(p);
         const outlook = Players.collegeOutlook(p);
+        const info = Season.recruitInfo(st, p);
         body.appendChild(h('div', { class: 'hero' },
           h('div', { style: { fontSize: '40px', fontWeight: 900, fontFamily: 'var(--mono)', minWidth: '64px', textAlign: 'center', position: 'relative', zIndex: 1 } }, p.num),
           h('div', { class: 'grow', style: { position: 'relative', zIndex: 1 } },
@@ -156,7 +153,13 @@
           });
           const side = h('div', { class: 'col' },
             h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Team'), levelSelect(st, p), h('div', { class: 'help' }, p.level === 'V' ? 'Varsity players compete for starting jobs and develop fastest when they start.' : 'Lower-level players get game reps every week, which helps them develop.')),
-            h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Next Level'), h('div', { class: 'bold' }, outlook.label), h('div', { class: 'help' }, 'Career ceiling ' + p.pot + '. Projection blends current ability with potential.')),
+            h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Recruiting'),
+              info ? h('div', null,
+                h('div', { class: 'row', style: { gap: '8px' } }, stars(info.stars), h('b', null, '#' + info.rank + ' in the class of ' + info.classYear), FNG.RecruitView.moveTag(info.move)),
+                h('div', { class: 'small muted', style: { marginTop: '4px' } }, 'Rating ' + info.score.toFixed(1) + (st.perf[p.id] ? ' · ' + FNG.Recruits.statLine(p, st.perf[p.id]) : '')),
+                h('div', { class: 'small', style: { marginTop: '6px', whiteSpace: 'normal' } }, info.offers.length ? h('span', null, h('b', null, info.offers.length + ' offer' + (info.offers.length > 1 ? 's' : '') + ': '), info.offers.map((o) => o.name).join(', ')) : 'No college offers yet.'))
+                : h('div', null, h('div', { class: 'bold' }, 'Not ranked'), h('div', { class: 'help' }, outlook.label + '. Production, development and varsity snaps can move a player into the rankings.')),
+              h('button', { type: 'button', class: 'btn sm mt', onclick: () => Win.recruits({ team: st.userId }) }, 'Recruit Rankings')),
             h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Position'), posSel, h('div', { class: 'help' }, best !== p.pos ? 'Projects best at ' + Players.POS_NAME[best] + '.' : 'Already at the best position.'), h('div', { class: 'mt' }, posGrid)),
             p.honors.length ? h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Honors'), p.honors.slice().reverse().map((x) => h('div', { class: 'small' }, '🏅 ' + x))) : null);
           body.appendChild(h('div', { class: 'grid c2' }, attrs, side));

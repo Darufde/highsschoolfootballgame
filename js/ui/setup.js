@@ -15,11 +15,7 @@
     WM.open('title', {
       title: 'Friday Night Gridiron',
       icon: 'football',
-      width: 460,
-      height: 470,
-      center: true,
-      closable: false,
-      resizable: false,
+      narrow: true,
       render(body) {
         const sum = App.saveSummary();
         const box = h('div', { class: 'title-screen' },
@@ -72,13 +68,8 @@
     WM.open('setup', {
       title: 'New Program',
       icon: 'football',
-      width: 1000,
-      height: 700,
-      center: true,
+      root: !App.hasSave(),
       manual: true,
-      onClose: () => {
-        if (!App.state) setTimeout(() => Win.title(), 0);
-      },
       render(body) {
         const errors = {};
         const left = h('div');

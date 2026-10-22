@@ -14,8 +14,6 @@
     WM.open('schools', {
       title: 'Schools',
       icon: 'schools',
-      width: 1040,
-      height: 660,
       state: { q: '', st: 'all', type: 'all', div: '0', county: 'all', sort: { key: 'name', dir: 'asc' } },
       render(body, w) {
         const st = App.state;
@@ -69,9 +67,6 @@
     WM.open('school:' + id, {
       title: 'School',
       icon: 'schools',
-      width: 860,
-      height: 640,
-      layoutKey: 'school',
       state: { tab: 'overview' },
       render(body, w) {
         const st = App.state;
@@ -79,14 +74,16 @@
         if (!s) return;
         WM.setTitle(w.id, s.name);
         const lg = Season.league(st, s.leagueId);
-        const pr = Season.pollRank(st, s, s.division);
+        const nat = Season.teamStanding(st, s, 'national');
+        const sta = Season.teamStanding(st, s, 'state');
+        const dvr = Season.teamStanding(st, s, 'division');
         body.appendChild(h('div', { class: 'hero', style: s.isUser ? null : { background: 'linear-gradient(115deg, ' + FNG.UI.schoolColors(s)[0] + '99, var(--panel-2) 65%)', borderColor: 'var(--line-2)' } },
           badge(s, st, 'lg'),
           h('div', { class: 'grow', style: { position: 'relative', zIndex: 1 } },
             h('div', { class: 'name' }, s.name, s.isUser ? h('span', { class: 'tag team', style: { marginLeft: '8px' } }, 'Your school') : null),
             h('div', { class: 'meta' }, s.city + ', ' + s.county + ' County, ' + World.stateName(s.state) + ' · ' + KIND[s.kind]),
             h('div', { class: 'meta' }, World.divLabel(s) + (s.region ? ' · ' + World.groupLabel(s) : '') + ' · ' + lg.name)),
-          h('div', { class: 'right', style: { position: 'relative', zIndex: 1 } }, h('div', { style: { fontSize: '26px', fontWeight: 800 } }, s.rec.w + '-' + s.rec.l), h('div', { class: 'small', style: { color: 'rgba(255,255,255,.75)' } }, pr ? '#' + pr + ' in ' + World.stateName(s.state) + ' ' + World.divShort(s) : 'Unranked'))));
+          h('div', { class: 'right', style: { position: 'relative', zIndex: 1 } }, h('div', { style: { fontSize: '26px', fontWeight: 800 } }, s.rec.w + '-' + s.rec.l), h('div', { class: 'small', style: { color: 'rgba(255,255,255,.75)' } }, '#' + sta.rank + ' ' + World.stateName(s.state) + ' · #' + nat.rank + ' national · #' + dvr.rank + ' ' + World.divShort(s)))));
 
         body.appendChild(tabs([{ value: 'overview', label: 'Overview' }, { value: 'roster', label: 'Varsity Roster' }, { value: 'schedule', label: 'Schedule' }, { value: 'history', label: 'History' }, { value: 'league', label: s.state === 'KY' ? 'District' : 'League' }], w.state.tab, (v) => { w.state.tab = v; WM.refresh(w.id); }));
         const T = w.state.tab;
@@ -103,7 +100,10 @@
             h('dt', null, 'Postseason'), h('dd', null, s.rec.result || (s.rec.seed ? 'No. ' + s.rec.seed + ' seed' : st.phase === 'regular' ? 'Season in progress' : 'Did not qualify')),
             h('dt', null, 'State titles'), h('dd', null, String(st.champions.filter((c) => c.id === s.id).length))));
           const r = s.isUser ? Team.userRatings(st) : Season.scout(st, s);
-          body.appendChild(h('div', { class: 'grid c2' }, info, ratingBars(r, s.isUser ? 'Team Ratings' : 'Scouting Report' + (st.program.facilities.film < 4 ? ' (estimated)' : ''))));
+          const recs = Season.topRecruits(st, s, 6);
+          const recCard = h('div', { class: 'card' }, h('div', { class: 'row between' }, h('h3', { class: 'sect', style: { margin: 0 } }, 'Ranked Recruits'), recs.length ? h('button', { type: 'button', class: 'btn sm ghost', onclick: () => Win.recruits({ team: s.id }) }, 'Rankings') : null),
+            recs.length ? recs.map((x) => h('div', { class: 'small', style: { marginTop: '6px' } }, stars(x.info.stars), ' ', h('button', { type: 'button', class: 'linklike', onclick: () => (s.isUser ? Win.player(x.p.id) : Win.prospect(x.p.id)) }, Players.fullName(x.p)), ' · ' + x.p.pos + ' · #' + x.info.rank + ' class of ' + x.info.classYear + (x.info.offers.length ? ' · ' + x.info.offers.length + ' offers' : ''))) : h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'No ranked recruits.'));
+          body.appendChild(h('div', { class: 'grid c2' }, h('div', { class: 'col' }, info, recCard), ratingBars(r, s.isUser ? 'Team Ratings' : 'Scouting Report' + (st.program.facilities.film < 4 ? ' (estimated)' : ''))));
         } else if (T === 'schedule') {
           const games = st.games.filter((g) => g.home === s.id || g.away === s.id).sort((a, b) => a.week - b.week);
           body.appendChild(table([
@@ -122,10 +122,11 @@
           body.appendChild(h('p', { class: 'small muted', style: { marginTop: 0 } }, ro.length + ' varsity players. ' + (scouted ? 'Ratings from your film room.' : 'Upgrade the Film Room to level 3 to see individual ratings.')));
           body.appendChild(table([
             { key: 'num', label: '#', render: (p) => p.num, cls: 'num r' },
-            { key: 'n', label: 'Name', render: (p) => Players.fullName(p) },
+            { key: 'n', label: 'Name', render: (p) => h('button', { type: 'button', class: 'linklike', onclick: () => Win.prospect(p.id) }, Players.fullName(p)) },
             { key: 'p', label: 'Pos', render: (p) => p.pos },
             { key: 'y', label: 'Yr', render: (p) => Players.CLASS_NAME[p.year] },
             { key: 'o', label: 'Ovr', render: (p) => (scouted ? ovrChip(Players.ovr(p)) : h('span', { class: 'dim' }, '?')), cls: 'c' },
+            { key: 'r', label: 'Recruit', render: (p) => { const i = Season.recruitInfo(st, p); return i ? h('span', { class: 'nowrap' }, stars(i.stars), ' #' + i.rank + ' (' + i.classYear + ')') : h('span', { class: 'dim' }, '—'); } },
           ], ro));
         } else if (T === 'history') {
           const titles = st.champions.filter((c) => c.id === s.id);

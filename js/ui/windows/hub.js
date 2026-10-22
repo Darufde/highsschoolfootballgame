@@ -24,6 +24,29 @@
     });
   }
 
+  function rankLine(st, s) {
+    const n = Season.teamStanding(st, s, 'national');
+    const t = Season.teamStanding(st, s, 'state');
+    const d = Season.teamStanding(st, s, 'division');
+    return '#' + n.rank + ' National · #' + t.rank + ' ' + World.stateName(s.state) + ' · #' + d.rank + ' ' + World.divShort(s);
+  }
+
+  // One side of the game preview: record, division, rankings and the team's best recruits.
+  function teamPreview(st, s, right) {
+    const recruits = Season.topRecruits(st, s, 3);
+    const open = (p) => (s.isUser ? Win.player(p.id) : Win.prospect(p.id));
+    return h('div', { class: 'card tight', style: right ? { textAlign: 'right' } : null },
+      h('div', { class: 'row nowrap', style: { gap: '8px', flexDirection: right ? 'row-reverse' : 'row' } }, badge(s, st),
+        h('div', { class: 'grow', style: { minWidth: 0 } },
+          s.isUser ? h('div', { class: 'bold ellipsis' }, s.name) : h('button', { type: 'button', class: 'linklike ellipsis', style: { maxWidth: '100%' }, onclick: () => Win.school(s.id) }, s.name),
+          h('div', { class: 'small muted' }, s.rec.w + '-' + s.rec.l + ' · ' + World.divLabel(s) + (s.rec.seed ? ' · #' + s.rec.seed + ' seed' : '')))),
+      h('div', { class: 'small', style: { margin: '6px 0' } }, rankLine(st, s)),
+      h('div', { class: 'tiny muted bold' }, 'TOP RECRUITS'),
+      recruits.length ? recruits.map((x) => h('div', { class: 'small', style: { marginTop: '3px' } },
+        FNG.UI.stars(x.info.stars), ' ', h('button', { type: 'button', class: 'linklike', onclick: () => open(x.p) }, FNG.Players.shortName(x.p)), ' ' + x.p.pos + ' · #' + x.info.rank + ' \u2019' + String(x.info.classYear).slice(2)))
+        : h('div', { class: 'small dim' }, 'No ranked recruits'));
+  }
+
   function thisWeekCard(st) {
     const u = Season.user(st);
     const card = h('div', { class: 'card accent' });
@@ -55,12 +78,7 @@
     const home = g.home === st.userId;
     const opp = Season.opponentOf(st, g, st.userId);
     const lg = g.league ? h('span', { class: 'tag team' }, u.state === 'KY' ? 'District' : 'League') : g.playoff ? h('span', { class: 'tag gold' }, 'Playoffs') : h('span', { class: 'tag' }, 'Non-league');
-    card.appendChild(h('div', { class: 'matchup mt mb' },
-      h('div', { class: 'side' }, badge(u, st), h('div', { class: 'grow' }, h('div', { class: 'bold ellipsis' }, u.name), h('div', { class: 'small muted' }, u.rec.w + '-' + u.rec.l + (u.rec.seed ? ' · #' + u.rec.seed + ' seed' : '')))),
-      h('div', { class: 'vs' }, g.neutral || home ? 'VS' : 'AT'),
-      h('div', { class: 'side r' }, badge(opp, st), h('div', { class: 'grow' },
-        h('button', { type: 'button', class: 'linklike ellipsis', style: { maxWidth: '100%' }, onclick: () => Win.school(opp.id) }, opp.name),
-        h('div', { class: 'small muted' }, opp.rec.w + '-' + opp.rec.l + ' · ' + World.divShort(opp) + (opp.state !== u.state ? ' · ' + opp.state : '') + (opp.rec.seed ? ' · #' + opp.rec.seed + ' seed' : ''))))));
+    card.appendChild(h('div', { class: 'preview mt mb' }, teamPreview(st, u, false), h('div', { class: 'vs' }, g.neutral || home ? 'VS' : 'AT'), teamPreview(st, opp, true)));
     card.appendChild(h('div', { class: 'row small muted mb' }, lg, h('span', null, g.neutral ? 'Neutral site' : home ? 'Home' : 'Away'), h('span', null, '· Forecast: ' + Season.gameWeather(g))));
     const us = Team.userRatings(st);
     const them = Season.scout(st, opp);
@@ -105,15 +123,14 @@
     WM.open('hub', {
       title: 'Program Hub',
       icon: 'hub',
-      width: 1000,
-      height: 700,
       render(body) {
         const st = App.state;
         const u = Season.user(st);
         const lg = Season.league(st, u.leagueId);
         const ratings = Team.userRatings(st);
-        const pr = Season.pollRank(st, u);
-        const prDiv = Season.pollRank(st, u, u.division);
+        const nat = Season.teamStanding(st, u, 'national');
+        const sta = Season.teamStanding(st, u, 'state');
+        const dvr = Season.teamStanding(st, u, 'division');
         const oh = u.state === 'OH';
         const levels = { V: 0, JV: 0, FR: 0 };
         for (const p of st.roster) levels[p.level]++;
@@ -135,7 +152,9 @@
           stat('Varsity Record', u.rec.w + '-' + u.rec.l, (oh ? 'League ' : 'District ') + u.rec.lw + '-' + u.rec.ll + (u.rec.streak ? ' · ' + u.rec.streak : '')),
           oh ? stat('Region ' + u.region, played ? '#' + u.cpRank : '—', played ? u.cp.toFixed(4) + ' computer pts' : 'Ratings begin after Week 1')
             : stat(lg.name.replace(/^Class \S+ /, ''), u.rec.lw + u.rec.ll ? U.ordinal(lgStand.indexOf(u) + 1) : '—', u.rec.lw + u.rec.ll ? 'of ' + lgStand.length + ' in the district' : 'District games come late in the season'),
-          stat(World.stateName(u.state) + ' Poll', prDiv ? '#' + prDiv + ' ' + World.divShort(u) : 'NR', pr ? '#' + pr + ' statewide' : 'Not in the statewide top 25'),
+          h('div', { class: 'card tight stat', style: { cursor: 'pointer' }, onclick: () => Win.rankings() }, h('div', { class: 'k' }, 'Team Rankings · ' + st.rankings.snaps[st.rankings.snaps.length - 1].label),
+            h('div', { class: 'v' }, '#' + sta.rank + ' ', h('span', { class: 'small muted', style: { fontWeight: 500 } }, World.stateName(u.state)), ' ', FNG.RecruitView.moveTag(sta.prev ? sta.move : 0)),
+            h('div', { class: 's' }, '#' + nat.rank + ' national · #' + dvr.rank + ' in ' + World.divShort(u))),
           h('div', { class: 'card tight stat' }, h('div', { class: 'k' }, 'Varsity Overall'), h('div', { class: 'v row', style: { gap: '8px' } }, ovrChip(Team.teamOverall(ratings)), h('span', { class: 'small ' + (st.program.funds < 0 ? 'bad-t' : 'muted'), style: { fontWeight: 500 } }, U.money(st.program.funds) + ' funds')), h('div', { class: 's' }, 'Prestige ' + u.prestige + '/100'))));
 
         const focus = select(Object.entries(Season.FOCUS).map(([value, label]) => ({ value, label })), st.program.focus, (v) => {

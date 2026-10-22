@@ -57,21 +57,38 @@
       Grace, Faith, Calvary, Heritage, Cornerstone, Covenant, Trinity, Victory, Harvest, Lighthouse, Providence,
       Redeemer, Emmanuel, Shiloh, Zion, Liberty, Crossroads, Living Word, New Hope, Rock Hill, Wellspring, Summit
     `),
+    // People schools are commonly named for (used alone, e.g. "Whitmer", "Withrow").
     historic: split(`
-      Garfield, McKinley, Harding, Taft, Hayes, Grant, Sherman, Edison, Wright, Glenn, Armstrong, Owens, Stowe, Chase,
-      Tod, Whitmore, Hartwell, Kensington, Ashbury, Lancaster, Whittier, Hawthorne, Emerson, Longfellow, Morrison,
-      Brookings, Sterling, Harmon, Whitfield, Carver, Douglass, Lowell, Bancroft, Kingsley, Thurman, Hollister,
-      Prescott, Beecher, Fulton, Roebling, Putnam, Cutler, Symmes, Worthington, Galloway, Meeker, Abbott, Ellery
+      Adams, Jefferson, Madison, Monroe, Jackson, Garfield, McKinley, Roosevelt, Wilson, Harding, Taft, Hayes,
+      Kennedy, Marshall, Douglass, Dunbar, Carver, Edison, Whitney, Rogers, Scott, Waite, Woodward, Withrow, Hughes,
+      Aiken, Whitmer, Bowsher, Libbey, Rhodes, Brush, Briggs, Ballard, Atherton, Conner, Cooper, Ryle, Doss,
+      Waggener, Holmes, Fairbanks, Mitchell, Shaw, Lowell, Hamilton, Kettering, Stivers, Meadowdale, Chaminade
     `),
-    compoundPre: split(`
-      Brook, Oak, Elm, Maple, Ridge, Fair, Glen, Lake, River, Spring, Wood, Pine, Cedar, Clear, Green, High, Silver,
-      Stone, Willow, Ash, Briar, Hazel, Kings, Mid, Shady, Rock, Sun, Bel, Wal, Hill, Meadow, Bright, Wind, Haw,
-      Crest, Linden, Bur, Holly, Whit, Fox
+    // Full honoree names (e.g. "John Marshall", "Henry Clay").
+    fullNames: split(`
+      John Adams, John Marshall, Thomas Jefferson, James Madison, Andrew Jackson, Henry Clay, Frederick Douglass,
+      Paul Laurence Dunbar, Thurgood Marshall, John Glenn, Jesse Owens, Neil Armstrong, Woodrow Wilson,
+      Theodore Roosevelt, James Monroe, Booker T. Washington, Martin Luther King, George Rogers Clark,
+      Daniel Boone, Simon Kenton, Thomas Edison, Orville Wright, James Ford Rhodes, Max Hayes, Ulysses S. Grant
     `),
-    compoundSuf: split(`
-      wood, view, mont, dale, field, ridge, land, crest, haven, brook, ford, side, more, ton, way, gate, port,
-      hurst, burg, wick, moor, croft, mead, worth
+    // Place names that fit a school anywhere.
+    places: split(`
+      Fairview, Lakeview, Riverview, Ridgeview, Westview, Northview, Southview, Eastview, Hillcrest, Fairmont,
+      Northmont, Westmont, Lakeside, Northridge, Southridge, Westridge, Eastridge, Northwood, Westwood, Eastwood,
+      Ridgewood, Forest Hills, Glen Oak, Elmwood, Woodridge, Highland, Brookside, Greenview, Valley View,
+      Pleasant View, Meadowbrook, Crestview, Clearview, Hilltop, Woodland, Edgewood, Glenwood, Brookwood,
+      Briarwood, Stonebridge, Rolling Hills, Prairie View, Oak Ridge, Pine Valley, Twin Valley, Hidden Valley
     `),
+    // Neighborhood-style names for big-city schools.
+    urban: split(`
+      Walnut Hills, Forest Park, Northland, Westland, Southland, Parkway, Linden, Kenwood, Eastmoor, Northside,
+      Westside, Southside, Beechcroft, Centennial, Independence, Liberty Park, Colonial Heights, Shawnee,
+      Seneca, Iroquois, Brookhaven, Glenville, Collinwood, Mount Auburn, Clifton, Bellevue Heights, Union Park,
+      Riverside Park, Lincoln Park, Washington Park, Fairmount, Hyde Park, Old Town, Five Points
+    `),
+    trees: split(`Oak, Elm, Maple, Cedar, Pine, Walnut, Chestnut, Hickory, Willow, Birch, Cherry, Beech, Poplar, Sycamore, Buckeye`),
+    features: split(`Hills, Ridge, Valley, Heights, Grove, Glen`),
+    creeks: split(`Fern, Mill, Bear, Elk, Spring, Stone, Turkey, Indian, Big, Clear, Rush, Otter, Beaver, Wolf, Crooked`),
     dirs: split(`North, South, East, West, Central`),
     dirErn: split(`Northern, Southern, Eastern, Western, Northwestern, Northeastern, Southwestern, Southeastern`),
     dirShort: split(`North, South, East, West, Northwest, Northeast, Southwest, Southeast`),

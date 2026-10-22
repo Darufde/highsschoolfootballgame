@@ -29,15 +29,12 @@
   function makeNamers(D) {
     const N = FNG.DATA.names;
 
+    // Realistic place-style names: "Walnut Hills", "Oak Grove", "Fern Creek".
     const compound = (r) => {
-      for (let i = 0; i < 10; i++) {
-        const pre = r.pick(N.compoundPre);
-        const suf = r.pick(N.compoundSuf);
-        if (pre.toLowerCase() === suf) continue;
-        if (pre[pre.length - 1].toLowerCase() === suf[0]) continue;
-        return pre + suf;
-      }
-      return r.pick(N.compoundPre) + 'view';
+      const kind = r.weighted({ list: 4, tree: 3, creek: 1.5 });
+      if (kind === 'list') return r.pick(N.places);
+      if (kind === 'tree') return r.pick(N.trees) + ' ' + r.pick(N.features);
+      return r.pick(N.creeks) + ' Creek';
     };
 
     const local = (r, c) => {
@@ -62,16 +59,17 @@
         case 'countyErn':
           return c.county + ' ' + r.pick(N.dirErn);
         default:
-          return r.pick(nearestRivers(D, c.lat, c.lon, 3)).name.replace(/ (River|Creek)$/, '') + ' ' + r.pick(['Ridge', 'Heights', 'Highlands', 'Trail']);
+          return r.pick(nearestRivers(D, c.lat, c.lon, 3)).name.replace(/ (River|Creek|Valley)$/, '') + ' ' + r.pick(['Ridge', 'Heights', 'Highlands']);
       }
     };
 
     const bigCity = (r, c) => {
-      const kind = r.weighted({ dir: 3, historic: 4, compound: 3, tech: 0.8 });
+      const kind = r.weighted({ dir: 2, historic: 3, full: 2.5, compound: 3, tech: 0.5 });
       if (kind === 'dir') return c.name + ' ' + r.pick(N.dirs);
       if (kind === 'historic') return r.pick(N.historic);
-      if (kind === 'compound') return compound(r);
-      return r.pick(N.historic) + ' ' + r.pick(['Tech', 'Polytechnic']);
+      if (kind === 'full') return r.pick(N.fullNames);
+      if (kind === 'compound') return r.chance(0.6) ? r.pick(N.urban) : r.chance(0.5) ? r.pick(N.creeks) + ' Creek' : compound(r);
+      return r.pick(['East', 'West', 'North', 'South', 'Central']) + ' Tech';
     };
 
     const catholic = (r, c) => {
@@ -304,7 +302,7 @@
         else if (i === 0 && isFree(c.county + ' County')) name = c.county + ' County';
         else name = tryName(r, (rr) => extra(rr, c));
         if (!name) name = tryName(r, namers.compound, 200);
-        const base = metro ? (c.pop * 0.04) / nPublic : (c.pop * 0.043) / nPublic + 60;
+        const base = metro ? (c.pop * 0.034) / nPublic : (c.pop * 0.033) / nPublic + 60;
         add({
           name, city: c.seat, county: c.county,
           lat: c.lat + r.float(-spread, spread), lon: c.lon + r.float(-spread, spread),

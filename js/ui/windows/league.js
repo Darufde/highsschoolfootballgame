@@ -16,8 +16,6 @@
     WM.open('standings', {
       title: 'League Standings',
       icon: 'standings',
-      width: 820,
-      height: 560,
       state: { league: leagueId || null, sort: null },
       render(body, w) {
         const st = App.state;
@@ -49,54 +47,115 @@
     });
   };
 
+  // Week number a snapshot reflects, for records "as of" that week.
+  function snapWeek(snap) {
+    if (snap.key === 'PRE') return 0;
+    if (snap.key === 'FINAL' || snap.key === 'CUR') return 99;
+    return snap.key[0] === 'W' ? Number(snap.key.slice(1)) : 10 + Number(snap.key.slice(1));
+  }
+
+  function recordAsOf(st, s, week) {
+    let w = 0;
+    let l = 0;
+    for (const g of st.games) {
+      if (!g.played || g.week > week || (g.home !== s.id && g.away !== s.id)) continue;
+      const us = g.home === s.id ? g.hs : g.as;
+      const them = g.home === s.id ? g.as : g.hs;
+      if (us > them) w++;
+      else l++;
+    }
+    return w + '-' + l;
+  }
+
   Win.rankings = function () {
     WM.open('rankings', {
-      title: 'Rankings',
+      title: 'Team Rankings',
       icon: 'rankings',
-      width: 860,
-      height: 640,
-      state: { tab: null, region: null, div: 0, st: null },
+      wide: true,
+      state: { tab: 'national', snap: null, st: null, div: null, region: null, all: false },
       render(body, w) {
         const st = App.state;
         const u = Season.user(st);
         const S = w.state;
-        if (!S.region) S.region = u.region || 1;
-        if (!S.tab) S.tab = u.state === 'OH' ? 'computer' : 'poll';
         if (!S.st) S.st = u.state;
-        body.appendChild(tabs([{ value: 'computer', label: 'Ohio Computer Ratings' }, { value: 'poll', label: 'State Polls' }], S.tab, (v) => { S.tab = v; WM.refresh(w.id); }));
-        if (S.tab === 'computer') {
+        if (!S.div) S.div = u.division;
+        if (!S.region) S.region = u.region || 1;
+        const snaps = st.rankings.snaps;
+        body.appendChild(tabs([
+          { value: 'national', label: 'National' }, { value: 'state', label: 'State' }, { value: 'division', label: 'Division / Class' }, { value: 'points', label: 'Ohio Playoff Points' },
+        ], S.tab, (v) => { S.tab = v; WM.refresh(w.id); }));
+
+        if (S.tab === 'points') {
           const regionOpts = [];
           for (let r = 1; r <= 28; r++) regionOpts.push({ value: r, label: 'Division ' + U.roman(Math.ceil(r / 4)) + ' · Region ' + r + ' (' + World.regionName(r) + ')' + (r === u.region ? ' ★' : '') });
-          body.appendChild(h('div', { class: 'toolbar' }, select(regionOpts, S.region, (v) => { S.region = Number(v); WM.refresh(w.id); }), h('div', { class: 'grow' }),
-            h('span', { class: 'small muted' }, 'Top 16 qualify for the playoffs.')));
-          const rows = Season.regionStandings(st, S.region);
+          body.appendChild(h('div', { class: 'toolbar' }, select(regionOpts, S.region, (v) => { S.region = Number(v); WM.refresh(w.id); }), h('div', { class: 'grow' }), h('span', { class: 'small muted' }, 'Top 16 qualify for the playoffs.')));
           body.appendChild(table([
             { key: 'rk', label: 'Rk', render: (s, i) => i + 1, cls: 'num' },
             { key: 'team', label: 'Team', render: (s) => teamCell(st, s) },
             { key: 'rec', label: 'Record', render: (s) => s.rec.w + '-' + s.rec.l, cls: 'num' },
             { key: 'cp', label: 'Avg Pts', render: (s) => s.cp.toFixed(4), cls: 'num r bold' },
             { key: 'lg', label: 'League', render: (s) => Season.league(st, s.leagueId).name, cls: 'muted' },
-            { key: 'st', label: 'Status', render: (s, i) => (st.phase !== 'regular' && st.playoffs ? (s.rec.seed ? h('span', { class: 'tag good' }, 'Seed ' + s.rec.seed) : h('span', { class: 'tag' }, 'Out')) : i < 16 ? h('span', { class: 'tag info' }, 'In') : h('span', { class: 'tag' }, 'Out')) },
-          ], rows, { rowClass: (s) => (s.isUser ? 'me' : ''), cutAfter: 16, onRow: (s) => Win.school(s.id) }));
-          body.appendChild(h('p', { class: 'help' }, 'Ohio-style computer ratings: Level 1 points for every win (6.0 vs Division I down to 3.0 vs Division VII) plus one-tenth of the Level 1 points earned by the teams you beat, divided by games scheduled.'));
-        } else {
-          const divs = S.st === 'KY' ? [1, 2, 3, 4, 5, 6].map((d) => ({ value: d, label: 7 - d + 'A' })) : [1, 2, 3, 4, 5, 6, 7].map((d) => ({ value: d, label: U.roman(d) }));
-          body.appendChild(h('div', { class: 'toolbar' },
-            seg([{ value: 'OH', label: 'Ohio' }, { value: 'KY', label: 'Kentucky' }], S.st, (v) => { S.st = v; S.div = 0; WM.refresh(w.id); }),
-            seg([{ value: 0, label: 'All' }].concat(divs), S.div, (v) => { S.div = v; WM.refresh(w.id); })));
-          const list = Season.poll(st, S.st, S.div || null);
-          body.appendChild(table([
-            { key: 'rk', label: 'Rk', render: (s, i) => i + 1, cls: 'num bold' },
-            { key: 'team', label: 'Team', render: (s) => teamCell(st, s) },
-            { key: 'rec', label: 'Record', render: (s) => s.rec.w + '-' + s.rec.l, cls: 'num' },
-            { key: 'div', label: 'Class', render: (s) => World.divShort(s) },
-            { key: 'reg', label: S.st === 'KY' ? 'District' : 'Region', render: (s) => (s.region ? s.region : Season.league(st, s.leagueId).name.replace(/^Class \S+ District /, '')), cls: 'num' },
-            { key: 'pw', label: 'Power', render: (s) => Math.round(s.elo), cls: 'num r' },
-            { key: 'city', label: 'City', render: (s) => s.city, cls: 'muted' },
-          ], list, { rowClass: (s) => (s.isUser ? 'me' : ''), onRow: (s) => Win.school(s.id) }));
-          const rank = S.st === u.state ? Season.pollRank(st, u, S.div || null) : 0;
-          body.appendChild(h('p', { class: 'help' }, (S.st === u.state ? u.name + (rank ? ' is ranked #' + rank + '. ' : ' is not ranked here. ') : '') + 'Polls are based on a power rating that rewards wins, margin and strength of opponent, including games across the state line.'));
+            { key: 'stt', label: 'Status', render: (s, i) => (st.phase !== 'regular' && st.playoffs ? (s.rec.seed ? h('span', { class: 'tag good' }, 'Seed ' + s.rec.seed) : h('span', { class: 'tag' }, 'Out')) : i < 16 ? h('span', { class: 'tag info' }, 'In') : h('span', { class: 'tag' }, 'Out')) },
+          ], Season.regionStandings(st, S.region), { rowClass: (s) => (s.isUser ? 'me' : ''), cutAfter: 16, onRow: (s) => Win.school(s.id) }));
+          body.appendChild(h('p', { class: 'help' }, 'Ohio playoff seeding uses OHSAA-style computer points: Level 1 points for every win (6.0 vs Division I down to 3.0 vs Division VII) plus one-tenth of the Level 1 points earned by the teams you beat, divided by games scheduled. Out-of-state opponents count at their Ohio-equivalent size.'));
+          return;
         }
+
+        // Which rankings: this season's weeks, or a past season's final top 100.
+        const snapOpts = snaps.map((x, i) => ({ value: 'c' + i, label: st.year + ' · ' + x.label })).reverse()
+          .concat(st.rankings.finals.filter((f) => f.year !== st.year).map((f) => ({ value: 'f' + f.year, label: f.year + ' · Final (top 100)' })));
+        if (!S.snap || !snapOpts.some((o) => o.value === S.snap)) S.snap = 'c' + (snaps.length - 1);
+        let snap;
+        let prevSnap = null;
+        let past = null;
+        if (S.snap[0] === 'c') {
+          const i = Number(S.snap.slice(1));
+          snap = snaps[i];
+          prevSnap = snaps[i - 1] || null;
+        } else {
+          past = st.rankings.finals.find((f) => 'f' + f.year === S.snap);
+          snap = { order: past.order, tpr: past.tpr };
+        }
+        const week = past ? 99 : snapWeek(snap);
+        let filter = null;
+        let scopeLabel = 'National';
+        if (S.tab === 'state') {
+          filter = (x) => x.state === S.st;
+          scopeLabel = World.stateName(S.st);
+        } else if (S.tab === 'division') {
+          filter = (x) => x.state === S.st && x.division === Number(S.div);
+          scopeLabel = World.stateName(S.st) + ' ' + World.divLabel({ state: S.st, division: Number(S.div) });
+        }
+        const list = FNG.TeamRank.list(st, snap, filter);
+        const prevRank = {};
+        if (prevSnap) for (const r of FNG.TeamRank.list(st, prevSnap, filter)) prevRank[r.s.id] = r.rank;
+
+        const controls = h('div', { class: 'toolbar' }, select(snapOpts, S.snap, (v) => { S.snap = v; WM.refresh(w.id); }));
+        if (S.tab !== 'national') controls.appendChild(seg([{ value: 'OH', label: 'Ohio' }, { value: 'KY', label: 'Kentucky' }], S.st, (v) => { S.st = v; S.div = 1; WM.refresh(w.id); }));
+        if (S.tab === 'division') {
+          const divs = S.st === 'KY' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5, 6, 7];
+          controls.appendChild(seg(divs.map((d) => ({ value: d, label: World.divShort({ state: S.st, division: d }) })), Number(S.div), (v) => { S.div = v; WM.refresh(w.id); }));
+        }
+        controls.appendChild(h('div', { class: 'grow' }));
+        const limit = S.tab === 'division' || S.all ? list.length : S.tab === 'state' ? 50 : 100;
+        controls.appendChild(h('span', { class: 'small muted' }, scopeLabel + ' · ' + list.length + ' teams'));
+        body.appendChild(controls);
+        const mine = list.find((r) => r.s.isUser);
+        if (mine) body.appendChild(h('div', { class: 'card tight mb' }, h('span', { class: 'bold' }, u.name + ': #' + mine.rank + ' ' + scopeLabel), prevRank[u.id] ? h('span', null, '  ', FNG.RecruitView.moveTag(prevRank[u.id] - mine.rank)) : null));
+
+        body.appendChild(table([
+          { key: 'rk', label: 'Rk', render: (r) => h('b', { class: 'num' }, r.rank), cls: 'num' },
+          { key: 'mv', label: '+/-', render: (r) => (prevSnap ? FNG.RecruitView.moveTag(prevRank[r.s.id] ? prevRank[r.s.id] - r.rank : 0) : h('span', { class: 'dim' }, '')) },
+          { key: 'team', label: 'Team', render: (r) => teamCell(st, r.s) },
+          { key: 'rec', label: 'Record', render: (r) => (past ? (r.s.history.find((x) => x.year === past.year) || { w: '?', l: '?' }).w + '-' + (r.s.history.find((x) => x.year === past.year) || { l: '?' }).l : recordAsOf(st, r.s, week)), cls: 'num' },
+          { key: 'cls', label: 'Class', render: (r) => World.divShort(r.s) },
+          { key: 'stt', label: 'State', render: (r) => r.s.state },
+          { key: 'tpr', label: 'Rating', render: (r) => r.tpr.toFixed(1), cls: 'num r' },
+          !past && snap === snaps[snaps.length - 1] ? { key: 'sos', label: 'SOS', render: (r) => r.s.sos.toFixed(1), cls: 'num r muted', title: 'Strength of schedule: average rating of opponents played' } : null,
+          !past && snap === snaps[snaps.length - 1] ? { key: 'mov', label: 'Margin', render: (r) => (r.s.mov > 0 ? '+' : '') + r.s.mov.toFixed(1), cls: 'num r muted' } : null,
+        ].filter(Boolean), list.slice(0, limit), { rowClass: (r) => (r.s.isUser ? 'me' : ''), onRow: (r) => Win.school(r.s.id) }));
+        if (limit < list.length) body.appendChild(h('div', { class: 'row mt', style: { justifyContent: 'center' } }, h('button', { type: 'button', class: 'btn sm', onclick: () => { S.all = true; WM.refresh(w.id); } }, 'Show all ' + list.length)));
+        body.appendChild(h('p', { class: 'help' }, 'Power ratings update after every week. Each game counts its margin of victory (capped at 24), the opponent\u2019s rating and a bonus for winning, so wins, losses, margin, strength of schedule and opponent quality all matter. The preseason rating comes from each roster and fades as games are played. National rankings include every state in the game (Ohio and Kentucky for now).'));
       },
     });
   };
@@ -127,8 +186,6 @@
     WM.open('playoffs', {
       title: 'Playoffs',
       icon: 'playoffs',
-      width: 1040,
-      height: 660,
       state: { div: null, view: null },
       render(body, w) {
         const st = App.state;

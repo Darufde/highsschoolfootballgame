@@ -23,8 +23,6 @@
     WM.open('schedule', {
       title: 'Schedule',
       icon: 'schedule',
-      width: 1000,
-      height: 600,
       state: { season: 'current' },
       render(body, w) {
         const st = App.state;
@@ -144,9 +142,6 @@
     WM.open('box:' + gameId, {
       title: 'Box Score',
       icon: 'box',
-      width: 900,
-      height: 640,
-      layoutKey: 'box',
       render(body, w) {
         const st = App.state;
         const g = st.games.find((x) => x.id === gameId);

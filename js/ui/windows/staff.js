@@ -30,8 +30,6 @@
     WM.open('staff', {
       title: 'Coaching Staff',
       icon: 'staff',
-      width: 1000,
-      height: 680,
       render(body) {
         const st = App.state;
         body.appendChild(h('p', { class: 'muted small', style: { marginTop: 0 } }, 'You are the head coach. Every assistant has a Teaching rating (player development) and a Game Day rating (game planning). Coordinators also bring a scheme that shapes play calling. Salaries are paid at the start of each season.'));
@@ -65,9 +63,6 @@
     WM.open('market:' + role, {
       title: 'Hire · ' + R.title,
       icon: 'staff',
-      width: 860,
-      height: 520,
-      layoutKey: 'market',
       render(body) {
         const st = App.state;
         const cur = st.staff[role];

@@ -135,8 +135,8 @@
     };
     const cur = ovr(p);
     // Potential is a career ceiling (college and beyond), not a high school one.
-    let pot = cur + Math.max(0, rng.normal((4 - year) * 4.5 + 9, 7));
-    if (rng.chance(0.04)) pot += rng.normal(14, 6);
+    let pot = cur + Math.max(0, rng.normal((4 - year) * 4.5 + 9, 6));
+    if (rng.chance(0.025)) pot += rng.normal(11, 5);
     p.pot = Math.round(U.clamp(pot, cur, 99));
     if (taken) taken.add(p.num);
     return p;
@@ -244,7 +244,9 @@
     const before = ovr(p);
     const room = Math.max(0, p.pot - before);
     const age = p.year === 1 ? 1 : p.year === 2 ? 0.95 : 0.9;
-    let gain = room * rng.float(0.16, 0.34) * age * mods.mult + (mods.practice - 1) * 0.35 + rng.normal(0.5, 1.3);
+    // High schoolers close to college level grow slowly; the rest of the ceiling is for later.
+    const ceiling = U.clamp((76 - before) / 28, 0.15, 1);
+    let gain = (room * rng.float(0.16, 0.34) * age * mods.mult + (mods.practice - 1) * 0.35) * ceiling + rng.normal(0.5, 1.3);
     gain = Math.max(-1, gain);
     applyGrowth(rng, p, gain, mods.physical || 0);
     p.ht = Math.min(p.ht + (p.year <= 2 ? rng.int(0, 1) : 0), 80);

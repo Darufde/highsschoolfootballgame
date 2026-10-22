@@ -125,6 +125,7 @@
     const g = {
       rng,
       record: opts.record !== false,
+      trackPlayers: opts.record !== false || opts.players !== false,
       teams: [prepTeam(home, 0, opts), prepTeam(away, 1, opts)],
       neutral: !!opts.neutral,
       weather: opts.weather || 'Clear',
@@ -228,7 +229,7 @@
   }
 
   function ps(g, ti, p) {
-    if (!g.record) return DUMMY;
+    if (!g.trackPlayers) return DUMMY;
     let s = g.pstats[p.id];
     if (!s) {
       s = g.pstats[p.id] = {

@@ -127,9 +127,12 @@
     return U.clamp(Math.log2(enrollment / 300) * 3.5, -4, 9);
   }
 
-  // Expected overall of an average junior in a program: tradition, size and youth program.
+  // Statewide depth of football talent (Ohio is the deeper football state).
+  const STATE_TALENT = { OH: 0, KY: -2.4 };
+
+  // Expected overall of an average junior in a program: tradition, size, state and youth program.
   function programTalent(school, facilities) {
-    return 28 + (school.prestige - 50) * 0.14 + sizeBonus(school.enrollment) * 0.5 + (school.type === 'private' ? 1.5 : 0) + (facilities ? (facilities.youth - 1) * 1 : 0);
+    return 28 + (STATE_TALENT[school.state] || 0) + (school.prestige - 50) * 0.14 + sizeBonus(school.enrollment) * 0.5 + (school.type === 'private' ? 1.5 : 0) + (facilities ? (facilities.youth - 1) * 1 : 0);
   }
 
   function userEffects(state) {

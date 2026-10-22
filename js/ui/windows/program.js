@@ -16,8 +16,6 @@
     WM.open('program', {
       title: 'Program & Facilities',
       icon: 'program',
-      width: 880,
-      height: 640,
       render(body) {
         const st = App.state;
         const u = Season.user(st);
@@ -58,8 +56,6 @@
     WM.open('offseason', {
       title: 'Offseason',
       icon: 'calendarNext',
-      width: 860,
-      height: 640,
       render(body) {
         const st = App.state;
         if (st.phase !== 'offseason' || !st.offseason) {
@@ -112,9 +108,10 @@
             { key: 'p', label: 'Pos', render: (g) => g.pos },
             { key: 'o', label: 'Ovr', render: (g) => ovrChip(g.ovr), cls: 'c' },
             { key: 'c', label: 'Ceiling', render: (g) => ovrChip(g.pot), cls: 'c' },
+            { key: 'rk', label: 'Final Rank', render: (g) => (g.rank ? h('span', { class: 'nowrap' }, stars(g.stars), ' #' + g.rank) : h('span', { class: 'dim' }, '—')) },
             { key: 'nl', label: 'Next Level', render: (g) => h('span', { class: 'tag ' + (g.tier >= 4 ? 'gold' : g.tier >= 2 ? 'info' : '') }, g.outlook) },
             { key: 'h', label: 'Honors', render: (g) => g.honors.join(', ') || '—', cls: 'muted' },
-          ], O.graduates.sort((a, b) => b.tier - a.tier || b.ovr - a.ovr), { empty: 'No seniors this year.' }));
+          ], O.graduates.sort((a, b) => b.tier - a.tier || (a.rank || 999) - (b.rank || 999) || b.ovr - a.ovr), { empty: 'No seniors this year.' }));
           body.appendChild(next('Player Development'));
         } else if (O.step === 2) {
           const avg = U.avg(O.development.map((d) => d.delta));
@@ -167,8 +164,6 @@
     WM.open('history', {
       title: 'History',
       icon: 'history',
-      width: 860,
-      height: 600,
       state: { tab: 'program', div: 0 },
       render(body, w) {
         const st = App.state;
@@ -206,8 +201,6 @@
     WM.open('settings', {
       title: 'Settings',
       icon: 'settings',
-      width: 560,
-      height: 520,
       render(body) {
         const st = App.state;
         if (st) {

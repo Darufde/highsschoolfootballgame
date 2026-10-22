@@ -1,246 +1,153 @@
-/* Window manager: draggable, resizable, minimizable windows with a taskbar. */
+/*
+ * Screen router. One full-page screen is shown at a time; detail screens (a player, a school,
+ * a box score) stack on top of the screen they were opened from and offer a Back button.
+ * Confirmation dialogs are modal overlays.
+ *
+ * Screens are opened with WM.open(id, { title, icon, render(body, screen), state }).
+ * Ids without a colon are top-level sections; ids like "player:P123" are detail screens.
+ */
 (function () {
   'use strict';
   const FNG = window.FNG;
   const { h, icon } = FNG.UI;
 
-  const LAYOUT_KEY = 'fng.layout.v1';
-  const wins = new Map();
-  let zTop = 10;
-  let cascade = 0;
-  let activeId = null;
-  let listeners = [];
-  let layout = {};
-  try {
-    layout = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}') || {};
-  } catch (e) {
-    layout = {};
-  }
+  const screens = new Map();
+  let current = null;
+  let stack = [];
+  const listeners = [];
+  const modals = new Map();
 
-  const root = () => document.getElementById('windows');
-  const desk = () => {
-    const d = document.getElementById('desktop');
-    return { w: d.clientWidth, h: d.clientHeight };
-  };
-  const mobile = () => window.innerWidth <= 760;
-  const layoutKey = (w) => w.opts.layoutKey || w.id.split(':')[0];
-
-  function saveLayout(w) {
-    if (w.opts.modal || mobile()) return;
-    layout[layoutKey(w)] = { x: w.x, y: w.y, w: w.width, h: w.height };
-    try {
-      localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
-    } catch (e) {
-      /* storage unavailable: layout simply isn't remembered */
-    }
-  }
-
-  function clampGeom(w) {
-    const D = desk();
-    w.width = Math.max(300, Math.min(w.width, D.w));
-    w.height = Math.max(180, Math.min(w.height, D.h));
-    w.x = Math.max(0, Math.min(w.x, D.w - Math.min(w.width, 120)));
-    w.y = Math.max(0, Math.min(w.y, D.h - 40));
-  }
-
-  function applyGeom(w) {
-    w.el.style.left = w.x + 'px';
-    w.el.style.top = w.y + 'px';
-    w.el.style.width = w.width + 'px';
-    w.el.style.height = w.height + 'px';
-  }
-
-  function notify() {
-    for (const fn of listeners) fn();
-  }
+  const host = () => document.getElementById('screen');
+  const notify = () => listeners.forEach((fn) => fn());
 
   function open(id, opts) {
-    let w = wins.get(id);
-    if (w) {
-      Object.assign(w.opts, opts);
-      if (opts.title) w.titleEl.textContent = opts.title;
-      w.minimized = false;
-      w.el.hidden = false;
-      focus(id);
-      refresh(id);
-      return w;
+    if (opts.modal) return openModal(id, opts);
+    let s = screens.get(id);
+    if (s) Object.assign(s.opts, opts);
+    else {
+      s = { id, opts, state: opts.state || {} };
+      screens.set(id, s);
     }
-    const D = desk();
-    w = { id, opts, state: opts.state || {}, minimized: false, max: false };
-    w.width = Math.min(opts.width || 640, D.w - 16);
-    w.height = Math.min(opts.height || 480, D.h - 16);
-    const saved = !opts.center && !opts.modal && layout[opts.layoutKey || id.split(':')[0]];
-    if (saved) {
-      w.x = saved.x;
-      w.y = saved.y;
-      w.width = saved.w;
-      w.height = saved.h;
-    } else if (opts.center || opts.modal) {
-      w.x = Math.max(0, (D.w - w.width) / 2);
-      w.y = Math.max(0, (D.h - w.height) / 2.4);
-    } else {
-      w.x = 112 + ((cascade * 32) % 260);
-      w.y = 14 + ((cascade * 28) % 200);
-      cascade++;
+    const isRoot = opts.root != null ? opts.root : !id.includes(':');
+    opts.root = isRoot;
+    opts.detail = !isRoot;
+    if (isRoot) stack = [];
+    else if (current && current !== id) {
+      stack = stack.filter((x) => x !== id);
+      stack.push(current);
+      if (stack.length > 25) stack.shift();
     }
-    clampGeom(w);
-    if (w.x + w.width > D.w) w.x = Math.max(0, D.w - w.width);
-    if (w.y + w.height > D.h) w.y = Math.max(0, D.h - w.height);
-
-    const btn = (cls, ic, title, fn) => h('button', { type: 'button', class: 'win-btn ' + cls, title, 'aria-label': title, onclick: (e) => { e.stopPropagation(); fn(); } }, icon(ic, 15));
-    w.titleEl = h('div', { class: 'wtitle' }, opts.title || '');
-    const btns = h('div', { class: 'win-btns' });
-    if (!opts.modal) btns.appendChild(btn('minb', 'min', 'Minimize', () => minimize(id)));
-    if (!opts.modal && opts.resizable !== false) btns.appendChild(btn('maxb', 'max', 'Maximize', () => toggleMax(id)));
-    if (opts.closable !== false) btns.appendChild(btn('close', 'close', 'Close', () => close(id)));
-    const bar = h('div', { class: 'win-title' }, h('span', { class: 'wicon' }, icon(opts.icon || 'box', 16)), w.titleEl, btns);
-    w.body = h('div', { class: 'win-body' + (opts.flush ? ' flush' : '') });
-    w.el = h('section', { class: 'win' + (opts.modal ? ' modal-win' : ''), role: 'dialog', 'aria-label': opts.title || id }, bar, w.body);
-    if (opts.resizable !== false) {
-      const rz = h('div', { class: 'win-resize' });
-      w.el.appendChild(rz);
-      dragger(rz, w, 'resize');
-    }
-    dragger(bar, w, 'move');
-    bar.addEventListener('dblclick', (e) => {
-      if (!e.target.closest('.win-btn') && opts.resizable !== false && !opts.modal) toggleMax(id);
-    });
-    w.el.addEventListener('pointerdown', () => focus(id), true);
-    if (opts.modal) {
-      w.shade = h('div', { class: 'modal-shade' });
-      root().appendChild(w.shade);
-    }
-    applyGeom(w);
-    if (opts.maximized && !opts.modal) {
-      w.max = true;
-      w.el.classList.add('max');
-    }
-    wins.set(id, w);
-    root().appendChild(w.el);
-    refresh(id);
-    focus(id);
-    return w;
+    const changed = current !== id;
+    current = id;
+    paint(changed);
+    notify();
+    return s;
   }
 
-  function dragger(handle, w, mode) {
-    let start = null;
-    handle.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || e.target.closest('.win-btn') || mobile() || w.max) return;
-      e.preventDefault();
-      start = { px: e.clientX, py: e.clientY, x: w.x, y: w.y, width: w.width, height: w.height };
-      handle.setPointerCapture(e.pointerId);
-    });
-    handle.addEventListener('pointermove', (e) => {
-      if (!start) return;
-      const dx = e.clientX - start.px;
-      const dy = e.clientY - start.py;
-      if (mode === 'move') {
-        w.x = start.x + dx;
-        w.y = start.y + dy;
-      } else {
-        w.width = start.width + dx;
-        w.height = start.height + dy;
-      }
-      clampGeom(w);
-      applyGeom(w);
-    });
-    const end = () => {
-      if (!start) return;
-      start = null;
-      saveLayout(w);
-    };
-    handle.addEventListener('pointerup', end);
-    handle.addEventListener('pointercancel', end);
+  function paint(scrollTop) {
+    const root = host();
+    const s = screens.get(current);
+    root.replaceChildren();
+    if (!s) return;
+    s.titleEl = h('h1', { class: 'screen-title' }, s.opts.title || '');
+    const back = stack.length && s.opts.back !== false ? h('button', { type: 'button', class: 'btn ghost sm back-btn', onclick: () => close(s.id) }, '‹ Back') : null;
+    s.body = h('div', { class: 'screen-body' });
+    root.appendChild(h('div', { class: 'screen' + (s.opts.wide ? ' wide' : '') + (s.opts.narrow ? ' narrow' : '') },
+      h('div', { class: 'screen-head' }, back, h('span', { class: 'screen-icon' }, icon(s.opts.icon || 'box', 20)), s.titleEl),
+      s.body));
+    renderBody(s);
+    if (scrollTop) root.scrollTop = 0;
+  }
+
+  function renderBody(s) {
+    try {
+      s.opts.render(s.body, s);
+    } catch (err) {
+      console.error(err);
+      s.body.appendChild(h('div', { class: 'empty' }, 'Something went wrong showing this screen: ' + err.message));
+    }
   }
 
   function refresh(id) {
-    const w = wins.get(id);
-    if (!w || !w.opts.render) return;
-    const scroll = w.body.scrollTop;
-    const inner = {};
-    w.body.querySelectorAll('[data-scroll]').forEach((el) => (inner[el.dataset.scroll] = el.scrollTop));
-    w.body.replaceChildren();
-    try {
-      w.opts.render(w.body, w);
-    } catch (err) {
-      console.error(err);
-      w.body.appendChild(h('div', { class: 'empty' }, 'Something went wrong rendering this window: ' + err.message));
-    }
-    w.body.scrollTop = scroll;
-    w.body.querySelectorAll('[data-scroll]').forEach((el) => {
-      if (inner[el.dataset.scroll] != null) el.scrollTop = inner[el.dataset.scroll];
-    });
+    if (modals.has(id)) return;
+    if (id !== current) return;
+    const s = screens.get(id);
+    const root = host();
+    const top = root.scrollTop;
+    s.body.replaceChildren();
+    renderBody(s);
+    root.scrollTop = top;
   }
 
   function refreshAll() {
-    for (const w of wins.values()) if (!w.opts.manual) refresh(w.id);
+    const s = screens.get(current);
+    if (s && !s.opts.manual) refresh(current);
+  }
+
+  function back() {
+    while (stack.length) {
+      const prev = stack.pop();
+      if (screens.has(prev)) {
+        current = prev;
+        paint(true);
+        notify();
+        return;
+      }
+    }
+    current = null;
+    host().replaceChildren();
+    notify();
+    if (FNG.App && FNG.App.home) FNG.App.home();
   }
 
   function close(id, force) {
-    const w = wins.get(id);
-    if (!w) return;
-    if (!force && w.opts.onClose && w.opts.onClose() === false) return;
-    w.el.remove();
-    if (w.shade) w.shade.remove();
-    wins.delete(id);
-    if (activeId === id) {
-      activeId = null;
-      const top = [...wins.values()].filter((x) => !x.minimized).sort((a, b) => Number(b.el.style.zIndex) - Number(a.el.style.zIndex))[0];
-      if (top) focus(top.id);
-    }
-    notify();
+    if (modals.has(id)) return closeModal(id);
+    const s = screens.get(id);
+    if (!s) return;
+    if (!force && s.opts.onClose && s.opts.onClose() === false) return;
+    if (s.opts.detail) screens.delete(id);
+    if (current === id) back();
+    else stack = stack.filter((x) => x !== id);
   }
 
   function closeAll() {
-    for (const id of [...wins.keys()]) close(id, true);
-  }
-
-  function focus(id) {
-    const w = wins.get(id);
-    if (!w) return;
-    if (activeId !== id || w.el.style.zIndex === '') {
-      zTop++;
-      w.el.style.zIndex = w.opts.modal ? 9000 + zTop : zTop;
-    }
-    for (const x of wins.values()) x.el.classList.toggle('focused', x.id === id);
-    activeId = id;
+    for (const id of [...modals.keys()]) closeModal(id);
+    screens.clear();
+    stack = [];
+    current = null;
+    host().replaceChildren();
     notify();
-  }
-
-  function minimize(id) {
-    const w = wins.get(id);
-    if (!w) return;
-    w.minimized = true;
-    w.el.hidden = true;
-    w.el.classList.remove('focused');
-    if (activeId === id) activeId = null;
-    notify();
-  }
-
-  function toggleMax(id) {
-    const w = wins.get(id);
-    if (!w) return;
-    w.max = !w.max;
-    w.el.classList.toggle('max', w.max);
-  }
-
-  function toggleFromTaskbar(id) {
-    const w = wins.get(id);
-    if (!w) return;
-    if (w.minimized) {
-      w.minimized = false;
-      w.el.hidden = false;
-      focus(id);
-    } else if (activeId === id) minimize(id);
-    else focus(id);
   }
 
   function setTitle(id, title) {
-    const w = wins.get(id);
-    if (!w) return;
-    w.opts.title = title;
-    w.titleEl.textContent = title;
-    notify();
+    const s = screens.get(id);
+    if (!s) return;
+    s.opts.title = title;
+    if (id === current && s.titleEl) s.titleEl.textContent = title;
+  }
+
+  /* Modal dialogs ---------------------------------------------------- */
+  function openModal(id, opts) {
+    const shade = h('div', { class: 'modal-shade' });
+    const body = h('div', { class: 'modal-body' });
+    const box = h('div', { class: 'modal', role: 'dialog', 'aria-label': opts.title || id, style: { maxWidth: (opts.width || 440) + 'px' } },
+      h('div', { class: 'modal-title' }, opts.title || ''), body);
+    shade.appendChild(box);
+    shade.addEventListener('pointerdown', (e) => {
+      if (e.target === shade && opts.onClose) opts.onClose();
+    });
+    document.getElementById('modals').appendChild(shade);
+    const m = { id, opts, el: shade, body };
+    modals.set(id, m);
+    opts.render(body, m);
+    return m;
+  }
+
+  function closeModal(id) {
+    const m = modals.get(id);
+    if (!m) return;
+    m.el.remove();
+    modals.delete(id);
   }
 
   function dialog(o) {
@@ -250,21 +157,13 @@
       const finish = (v) => {
         if (done) return;
         done = true;
-        close(id, true);
+        closeModal(id);
         resolve(v);
       };
-      open(id, {
+      openModal(id, {
         title: o.title || 'Confirm',
-        icon: o.icon || 'box',
-        modal: true,
-        resizable: false,
-        width: o.width || 420,
-        height: o.height || 230,
-        manual: true,
-        onClose: () => {
-          finish(null);
-          return false;
-        },
+        width: o.width || 440,
+        onClose: () => finish(null),
         render: (body) => {
           body.appendChild(typeof o.body === 'string' ? h('p', { style: { marginTop: 0 } }, o.body) : o.body);
           const row = h('div', { class: 'row end mt' });
@@ -281,19 +180,27 @@
     return dialog({ title, body: text, buttons: [{ label: 'Cancel', value: false }, { label: okLabel || 'OK', value: true, cls: danger ? 'danger' : 'primary' }] });
   }
 
-  window.addEventListener('resize', () => {
-    for (const w of wins.values()) {
-      clampGeom(w);
-      applyGeom(w);
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const ids = [...modals.keys()];
+    if (ids.length) {
+      const m = modals.get(ids[ids.length - 1]);
+      if (m.opts.onClose) m.opts.onClose();
     }
   });
 
   FNG.WM = {
-    open, close, closeAll, focus, minimize, toggleMax, toggleFromTaskbar, refresh, refreshAll, setTitle, dialog, confirm,
-    isOpen: (id) => wins.has(id),
-    get: (id) => wins.get(id),
-    list: () => [...wins.values()].filter((w) => !w.opts.modal && !w.opts.hideTask),
-    active: () => activeId,
+    open, close, closeAll, refresh, refreshAll, setTitle, dialog, confirm, back,
+    isOpen: (id) => current === id,
+    current: () => current,
+    rootOf: () => {
+      const ids = stack.concat(current ? [current] : []);
+      for (const id of ids) {
+        const s = screens.get(id);
+        if (s && s.opts.root) return id;
+      }
+      return null;
+    },
     onChange: (fn) => listeners.push(fn),
   };
 })();

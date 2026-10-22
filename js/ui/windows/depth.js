@@ -30,8 +30,6 @@
     WM.open('depth', {
       title: 'Depth Chart',
       icon: 'depth',
-      width: 920,
-      height: 700,
       render(body) {
         const st = App.state;
         const lineup = Team.resolveLineup(st.roster, st.depth);

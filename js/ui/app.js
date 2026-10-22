@@ -11,16 +11,17 @@
   const SAVE_KEY = 'fng.save.v1';
 
   const APPS = [
-    { id: 'hub', label: 'Program Hub', icon: 'hub' },
+    { id: 'hub', label: 'Hub', icon: 'hub' },
     { id: 'roster', label: 'Roster', icon: 'roster' },
     { id: 'depth', label: 'Depth Chart', icon: 'depth' },
-    { id: 'staff', label: 'Coaching Staff', icon: 'staff' },
+    { id: 'staff', label: 'Staff', icon: 'staff' },
     { id: 'schedule', label: 'Schedule', icon: 'schedule' },
-    { id: 'standings', label: 'League Standings', icon: 'standings' },
-    { id: 'rankings', label: 'Rankings', icon: 'rankings' },
+    { id: 'standings', label: 'Standings', icon: 'standings' },
+    { id: 'rankings', label: 'Team Rankings', icon: 'rankings' },
+    { id: 'recruits', label: 'Recruits', icon: 'star' },
     { id: 'playoffs', label: 'Playoffs', icon: 'playoffs' },
     { id: 'schools', label: 'Schools', icon: 'schools' },
-    { id: 'program', label: 'Program & Facilities', icon: 'program' },
+    { id: 'program', label: 'Facilities', icon: 'program' },
     { id: 'history', label: 'History', icon: 'history' },
     { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
@@ -45,7 +46,7 @@
   }
 
   function valid(s) {
-    return s && s.version === Season.SAVE_VERSION && Array.isArray(s.schools) && Array.isArray(s.roster) && s.userId;
+    return s && (s.version === Season.SAVE_VERSION || s.version === 2) && Array.isArray(s.schools) && Array.isArray(s.roster) && s.userId;
   }
 
   // A save from an earlier version of the game that can no longer be loaded.
@@ -112,7 +113,7 @@
       reader.onload = () => {
         try {
           const s = JSON.parse(reader.result);
-          if (s && s.version && s.version !== Season.SAVE_VERSION) {
+          if (s && s.version && !valid(s)) {
             toast('That save is from an older version of the game and can\u2019t be loaded.', 'bad', 6000);
             return;
           }
@@ -149,121 +150,97 @@
   };
 
   /* ------------------------------------------------------------------ */
-  /* Shell                                                               */
+  /* Shell: top bar with the program, the next action and section tabs   */
   /* ------------------------------------------------------------------ */
   function openApp(id) {
-    closeStart();
     if (!App.state && id !== 'settings') return;
     Win[id]();
   }
 
-  function renderIcons() {
-    const box = document.getElementById('desktop-icons');
-    box.replaceChildren();
-    if (!App.state) return;
-    for (const a of APPS) {
-      const el = h('button', { type: 'button', class: 'dicon', title: a.label }, h('span', { class: 'glyph' }, icon(a.icon, 22)), h('span', null, a.label));
-      el.addEventListener('dblclick', () => openApp(a.id));
-      el.addEventListener('click', () => {
-        if (window.matchMedia('(hover: none)').matches || window.innerWidth <= 760) openApp(a.id);
-      });
-      el.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') openApp(a.id);
-      });
-      box.appendChild(el);
+  let menuEl = null;
+  function closeMenu() {
+    if (menuEl) {
+      menuEl.remove();
+      menuEl = null;
     }
   }
-
-  let startEl = null;
-  function closeStart() {
-    if (startEl) {
-      startEl.remove();
-      startEl = null;
-      document.querySelector('.tb-start') && document.querySelector('.tb-start').classList.remove('open');
-    }
-  }
-  function toggleStart() {
-    if (startEl) return closeStart();
-    const st = App.state;
+  function toggleMenu(anchor) {
+    if (menuEl) return closeMenu();
     const items = [];
-    if (st) {
-      const u = Season.user(st);
-      items.push(h('div', { class: 'start-head' }, badge(u, st), h('div', null, h('div', { class: 't' }, u.name), h('div', { class: 's' }, 'Coach ' + st.coach.name + ' · ' + st.year))));
-      for (const a of APPS) items.push(h('button', { type: 'button', class: 'start-item', onclick: () => openApp(a.id) }, h('span', { class: 'glyph' }, icon(a.icon, 18)), a.label));
-      items.push(h('div', { class: 'start-sep' }));
-      items.push(h('button', { type: 'button', class: 'start-item', onclick: () => { closeStart(); App.save(); } }, h('span', { class: 'glyph' }, icon('save', 18)), 'Save Game'));
-      items.push(h('button', { type: 'button', class: 'start-item', onclick: () => { closeStart(); App.toTitle(); } }, h('span', { class: 'glyph' }, icon('football', 18)), 'Main Menu'));
-    } else {
-      items.push(h('div', { class: 'start-head' }, h('div', null, h('div', { class: 't' }, 'Friday Night Gridiron'), h('div', { class: 's' }, 'High School Football'))));
-      items.push(h('button', { type: 'button', class: 'start-item', onclick: () => { closeStart(); App.toTitle(); } }, h('span', { class: 'glyph' }, icon('football', 18)), 'Main Menu'));
+    if (App.state) {
+      items.push(h('button', { type: 'button', class: 'menu-item', onclick: () => { closeMenu(); App.save(); } }, icon('save', 16), 'Save Game'));
+      items.push(h('button', { type: 'button', class: 'menu-item', onclick: () => { closeMenu(); Win.settings(); } }, icon('settings', 16), 'Settings'));
     }
-    startEl = h('div', { class: 'start-menu', role: 'menu' }, items);
-    document.body.appendChild(startEl);
-    document.querySelector('.tb-start').classList.add('open');
+    items.push(h('button', { type: 'button', class: 'menu-item', onclick: () => { closeMenu(); App.toTitle(); } }, icon('football', 16), 'Main Menu'));
+    menuEl = h('div', { class: 'menu', role: 'menu' }, items);
+    const r = anchor.getBoundingClientRect();
+    menuEl.style.top = r.bottom + 6 + 'px';
+    menuEl.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+    document.body.appendChild(menuEl);
   }
   document.addEventListener('pointerdown', (e) => {
-    if (startEl && !e.target.closest('.start-menu') && !e.target.closest('.tb-start')) closeStart();
+    if (menuEl && !e.target.closest('.menu') && !e.target.closest('.menu-btn')) closeMenu();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeStart();
+    if (e.key === 'Escape') closeMenu();
   });
 
-  function renderTaskbar() {
-    const tb = document.getElementById('taskbar');
-    tb.replaceChildren();
+  function renderTopbar() {
+    const bar = document.getElementById('topbar');
+    bar.replaceChildren();
     const st = App.state;
-    const startBtn = h('button', { type: 'button', class: 'tb-start', onclick: toggleStart, 'aria-label': 'Menu' },
-      st ? badge(Season.user(st), st, 'sm') : h('span', { class: 'sbadge sm', style: { background: '#8b4513', color: '#fff' } }, 'FN'),
-      h('span', null, 'Menu'));
-    const winsBox = h('div', { class: 'tb-wins' });
-    for (const w of WM.list()) {
-      winsBox.appendChild(h('button', {
-        type: 'button',
-        class: 'tb-win' + (WM.active() === w.id ? ' active' : '') + (w.minimized ? ' min' : ''),
-        title: w.opts.title,
-        onclick: () => WM.toggleFromTaskbar(w.id),
-      }, icon(w.opts.icon || 'box', 15), h('span', null, w.opts.title)));
-    }
-    tb.append(startBtn, winsBox);
+    const brand = st
+      ? h('button', { type: 'button', class: 'brand', onclick: () => Win.hub() }, badge(Season.user(st), st), h('div', { class: 'brand-text' }, h('div', { class: 'brand-name' }, Season.user(st).name), h('div', { class: 'brand-sub' }, 'Coach ' + st.coach.name)))
+      : h('div', { class: 'brand' }, h('span', { class: 'sbadge', style: { background: '#8b4513', color: '#fff' } }, 'FN'), h('div', { class: 'brand-text' }, h('div', { class: 'brand-name' }, 'Friday Night Gridiron'), h('div', { class: 'brand-sub' }, 'High School Football')));
+    const right = h('div', { class: 'top-right' });
     if (st) {
       const u = Season.user(st);
-      const status = h('div', { class: 'tb-status' },
-        h('span', { class: 'hide-sm' }, h('b', null, st.year), ' · ', Season.phaseLabel(st)),
-        h('span', { class: 'hide-sm' }, 'Record ', h('b', null, u.rec.w + '-' + u.rec.l)),
-        h('button', { type: 'button', class: 'btn primary sm', onclick: () => App.primaryAction() }, icon('play', 13), App.primaryLabel()));
-      tb.appendChild(status);
+      right.append(
+        h('div', { class: 'top-status' }, h('b', null, st.year + ' · ' + Season.phaseLabel(st)), h('span', null, 'Varsity ' + u.rec.w + '-' + u.rec.l)),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => App.primaryAction() }, icon('play', 14), App.primaryLabel()));
+    }
+    right.appendChild(h('button', { type: 'button', class: 'btn ghost menu-btn', 'aria-label': 'Menu', onclick: (e) => toggleMenu(e.currentTarget) }, '☰'));
+    bar.appendChild(h('div', { class: 'top-row' }, brand, right));
+    if (st) {
+      const active = WM.rootOf();
+      const nav = h('nav', { class: 'top-nav', 'aria-label': 'Sections' });
+      for (const a of APPS) {
+        if (a.id === 'settings') continue;
+        nav.appendChild(h('button', { type: 'button', class: 'nav-item' + (active === a.id ? ' on' : ''), onclick: () => openApp(a.id) }, icon(a.icon, 16), a.label));
+      }
+      bar.appendChild(nav);
+      const on = nav.querySelector('.on');
+      if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
   }
-  WM.onChange(renderTaskbar);
+  WM.onChange(renderTopbar);
 
   App.changed = function () {
     WM.refreshAll();
-    renderTaskbar();
+    renderTopbar();
     const st = App.state;
-    if (st) {
-      document.getElementById('desktop').dataset.watermark = Season.user(st).name;
-      if (st.settings.autoSave) App.save(true);
-    }
+    if (st && st.settings.autoSave) App.save(true);
+  };
+
+  App.home = function () {
+    if (App.state) Win.hub();
+    else Win.title();
   };
 
   App.start = function (state) {
-    App.state = state;
+    App.state = Season.migrate(state);
     App.applyTheme(state.colors);
     WM.closeAll();
-    renderIcons();
-    document.getElementById('desktop').dataset.watermark = Season.user(state).name;
     Win.hub();
-    renderTaskbar();
+    renderTopbar();
   };
 
   App.toTitle = function () {
     if (App.state) App.save(true);
     App.state = null;
     WM.closeAll();
-    renderIcons();
-    document.getElementById('desktop').dataset.watermark = 'Friday Night Gridiron';
     App.applyTheme(null);
-    renderTaskbar();
+    renderTopbar();
     Win.title();
   };
 
