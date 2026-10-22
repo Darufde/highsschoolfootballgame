@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const FNG = window.FNG;
-  const { U, Season, World, Team, Schedule } = FNG;
+  const { U, Season, World, Team, Schedule, Players } = FNG;
   const { h, badge, table, select, seg, tabs, ovrChip, stars } = FNG.UI;
   const WM = FNG.WM;
   const App = FNG.App;
@@ -12,21 +12,22 @@
 
   Win.schools = function () {
     WM.open('schools', {
-      title: 'Ohio Schools',
+      title: 'Schools',
       icon: 'schools',
       width: 1040,
       height: 660,
-      state: { q: '', type: 'all', div: '0', county: 'all', sort: { key: 'name', dir: 'asc' } },
+      state: { q: '', st: 'all', type: 'all', div: '0', county: 'all', sort: { key: 'name', dir: 'asc' } },
       render(body, w) {
         const st = App.state;
         const S = w.state;
-        const counties = [...new Set(st.schools.map((s) => s.county))].sort();
+        const counties = [...new Set(st.schools.filter((s) => S.st === 'all' || s.state === S.st).map((s) => s.county))].sort();
         const results = h('div');
         const count = h('span', { class: 'small muted' });
         const draw = () => {
           const q = S.q.trim().toLowerCase();
           const rows = st.schools.filter((s) =>
             (!q || s.name.toLowerCase().includes(q) || s.city.toLowerCase().includes(q) || s.county.toLowerCase().includes(q)) &&
+            (S.st === 'all' || s.state === S.st) &&
             (S.type === 'all' || s.type === S.type) &&
             (S.div === '0' || s.division === Number(S.div)) &&
             (S.county === 'all' || s.county === S.county));
@@ -36,8 +37,9 @@
             { key: 'city', label: 'City', value: (s) => s.city, defaultDir: 'asc' },
             { key: 'county', label: 'County', value: (s) => s.county, defaultDir: 'asc' },
             { key: 'type', label: 'Type', value: (s) => s.kind, render: (s) => (s.type === 'public' ? h('span', { class: 'tag' }, 'Public') : h('span', { class: 'tag info' }, 'Private')) },
-            { key: 'div', label: 'Div', value: (s) => s.division, render: (s) => U.roman(s.division), defaultDir: 'asc' },
-            { key: 'region', label: 'Reg', value: (s) => s.region, cls: 'num', defaultDir: 'asc' },
+            { key: 'state', label: 'St', value: (s) => s.state, defaultDir: 'asc' },
+            { key: 'div', label: 'Class', value: (s) => s.state + s.division, render: (s) => World.divShort(s), defaultDir: 'asc' },
+            { key: 'league', label: 'League / District', value: (s) => Season.league(st, s.leagueId).name, cls: 'muted', defaultDir: 'asc' },
             { key: 'enr', label: 'Enroll', value: (s) => s.enrollment, render: (s) => U.num(s.enrollment), cls: 'num r' },
             { key: 'rec', label: 'Record', value: (s) => U.pct(s.rec.w, s.rec.l) * 100 + s.rec.w, render: (s) => s.rec.w + '-' + s.rec.l, cls: 'num' },
             { key: 'pres', label: 'Tradition', value: (s) => s.prestige, render: (s) => stars(U.clamp(Math.round(s.prestige / 20), 1, 5)) },
@@ -45,8 +47,9 @@
         };
         const search = h('input', { class: 'input', placeholder: 'Search by school, city or county…', value: S.q, style: { width: '260px' }, oninput: (e) => { S.q = e.target.value; draw(); } });
         body.appendChild(h('div', { class: 'toolbar' }, search,
+          select([{ value: 'all', label: 'Ohio & Kentucky' }, { value: 'OH', label: 'Ohio' }, { value: 'KY', label: 'Kentucky' }], S.st, (v) => { S.st = v; S.div = '0'; S.county = 'all'; WM.refresh(w.id); }),
           select([{ value: 'all', label: 'All types' }, { value: 'public', label: 'Public' }, { value: 'private', label: 'Private' }], S.type, (v) => { S.type = v; draw(); }),
-          select([{ value: '0', label: 'All divisions' }].concat([1, 2, 3, 4, 5, 6, 7].map((d) => ({ value: String(d), label: 'Division ' + U.roman(d) }))), S.div, (v) => { S.div = v; draw(); }),
+          S.st === 'all' ? null : select([{ value: '0', label: S.st === 'KY' ? 'All classes' : 'All divisions' }].concat((S.st === 'KY' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5, 6, 7]).map((d) => ({ value: String(d), label: World.divLabel({ state: S.st, division: d }) }))), S.div, (v) => { S.div = v; draw(); }),
           select([{ value: 'all', label: 'All counties' }].concat(counties.map((c) => ({ value: c, label: c + ' County' }))), S.county, (v) => { S.county = v; draw(); }),
           h('div', { class: 'grow' }), count));
         body.appendChild(results);
@@ -81,19 +84,22 @@
           badge(s, st, 'lg'),
           h('div', { class: 'grow', style: { position: 'relative', zIndex: 1 } },
             h('div', { class: 'name' }, s.name, s.isUser ? h('span', { class: 'tag team', style: { marginLeft: '8px' } }, 'Your school') : null),
-            h('div', { class: 'meta' }, s.city + ', ' + s.county + ' County, Ohio · ' + KIND[s.kind]),
-            h('div', { class: 'meta' }, 'Division ' + U.roman(s.division) + ' · Region ' + s.region + ' (' + World.regionName(s.region) + ') · ' + lg.name)),
-          h('div', { class: 'right', style: { position: 'relative', zIndex: 1 } }, h('div', { style: { fontSize: '26px', fontWeight: 800 } }, s.rec.w + '-' + s.rec.l), h('div', { class: 'small', style: { color: 'rgba(255,255,255,.75)' } }, pr ? '#' + pr + ' in D-' + U.roman(s.division) : 'Unranked'))));
+            h('div', { class: 'meta' }, s.city + ', ' + s.county + ' County, ' + World.stateName(s.state) + ' · ' + KIND[s.kind]),
+            h('div', { class: 'meta' }, World.divLabel(s) + (s.region ? ' · ' + World.groupLabel(s) : '') + ' · ' + lg.name)),
+          h('div', { class: 'right', style: { position: 'relative', zIndex: 1 } }, h('div', { style: { fontSize: '26px', fontWeight: 800 } }, s.rec.w + '-' + s.rec.l), h('div', { class: 'small', style: { color: 'rgba(255,255,255,.75)' } }, pr ? '#' + pr + ' in ' + World.stateName(s.state) + ' ' + World.divShort(s) : 'Unranked'))));
 
-        body.appendChild(tabs([{ value: 'overview', label: 'Overview' }, { value: 'schedule', label: 'Schedule' }, { value: 'history', label: 'History' }, { value: 'league', label: 'League' }], w.state.tab, (v) => { w.state.tab = v; WM.refresh(w.id); }));
+        body.appendChild(tabs([{ value: 'overview', label: 'Overview' }, { value: 'roster', label: 'Varsity Roster' }, { value: 'schedule', label: 'Schedule' }, { value: 'history', label: 'History' }, { value: 'league', label: s.state === 'KY' ? 'District' : 'League' }], w.state.tab, (v) => { w.state.tab = v; WM.refresh(w.id); }));
         const T = w.state.tab;
         if (T === 'overview') {
           const info = h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Profile'), h('dl', { class: 'kv' },
-            h('dt', null, 'Enrollment'), h('dd', null, U.num(s.enrollment) + (s.type === 'private' ? ' (×1.3 for divisions)' : '')),
+            h('dt', null, 'Enrollment'), h('dd', null, U.num(s.enrollment) + (s.type === 'private' && s.state === 'OH' ? ' (×1.3 for divisions)' : '')),
+            h('dt', null, 'Coaching staff'), h('dd', null, s.isUser ? 'Yours' : s.staffQ >= 62 ? 'Excellent' : s.staffQ >= 52 ? 'Good' : s.staffQ >= 42 ? 'Average' : 'Below average'),
             h('dt', null, 'Tradition'), h('dd', null, stars(U.clamp(Math.round(s.prestige / 20), 1, 5)), ' ', h('span', { class: 'muted small' }, s.prestige + '/100')),
             h('dt', null, 'League record'), h('dd', null, s.rec.lw + '-' + s.rec.ll),
             h('dt', null, 'Points'), h('dd', null, s.rec.pf + ' for · ' + s.rec.pa + ' against'),
-            h('dt', null, 'Computer'), h('dd', null, s.cp.toFixed(4) + ' (#' + (s.cpRank || '—') + ' in Region ' + s.region + ')'),
+            h('dt', null, 'Yards / game'), h('dd', null, s.rec.gp ? Math.round(s.rec.yds / s.rec.gp) + ' gained · ' + Math.round(s.rec.ydsA / s.rec.gp) + ' allowed' : '—'),
+            h('dt', null, 'Turnovers'), h('dd', null, s.rec.gp ? s.rec.toF + ' forced · ' + s.rec.to + ' lost' : '—'),
+            s.region ? h('dt', null, 'Computer') : null, s.region ? h('dd', null, s.cp.toFixed(4) + ' (#' + (s.cpRank || '—') + ' in Region ' + s.region + ')') : null,
             h('dt', null, 'Postseason'), h('dd', null, s.rec.result || (s.rec.seed ? 'No. ' + s.rec.seed + ' seed' : st.phase === 'regular' ? 'Season in progress' : 'Did not qualify')),
             h('dt', null, 'State titles'), h('dd', null, String(st.champions.filter((c) => c.id === s.id).length))));
           const r = s.isUser ? Team.userRatings(st) : Season.scout(st, s);
@@ -106,9 +112,24 @@
             { key: 'type', label: '', render: (g) => (g.playoff ? h('span', { class: 'tag gold' }, 'Playoff') : g.league ? h('span', { class: 'tag team' }, 'League') : '') },
             { key: 'res', label: 'Result', render: (g) => { if (!g.played) return h('span', { class: 'dim' }, Schedule.weekDateStr(st.year, g.week)); const us = g.home === s.id ? g.hs : g.as; const them = g.home === s.id ? g.as : g.hs; return h('span', { class: 'tag ' + (us > them ? 'good' : 'bad') }, (us > them ? 'W ' : 'L ') + us + '-' + them + (g.ot ? ' OT' : '')); } },
           ], games, { empty: 'No games scheduled.' }));
+        } else if (T === 'roster') {
+          if (s.isUser) {
+            body.appendChild(h('div', { class: 'empty' }, h('button', { type: 'button', class: 'btn', onclick: () => Win.roster() }, 'Open your roster')));
+            return;
+          }
+          const ro = Season.aiRoster(st, s).slice().sort((a, b) => Players.POSITIONS.indexOf(a.pos) - Players.POSITIONS.indexOf(b.pos) || Players.ovr(b) - Players.ovr(a));
+          const scouted = st.program.facilities.film >= 3;
+          body.appendChild(h('p', { class: 'small muted', style: { marginTop: 0 } }, ro.length + ' varsity players. ' + (scouted ? 'Ratings from your film room.' : 'Upgrade the Film Room to level 3 to see individual ratings.')));
+          body.appendChild(table([
+            { key: 'num', label: '#', render: (p) => p.num, cls: 'num r' },
+            { key: 'n', label: 'Name', render: (p) => Players.fullName(p) },
+            { key: 'p', label: 'Pos', render: (p) => p.pos },
+            { key: 'y', label: 'Yr', render: (p) => Players.CLASS_NAME[p.year] },
+            { key: 'o', label: 'Ovr', render: (p) => (scouted ? ovrChip(Players.ovr(p)) : h('span', { class: 'dim' }, '?')), cls: 'c' },
+          ], ro));
         } else if (T === 'history') {
           const titles = st.champions.filter((c) => c.id === s.id);
-          if (titles.length) body.appendChild(h('div', { class: 'card tight mb' }, '🏆 State champions: ' + titles.map((t) => t.year + ' (D-' + U.roman(t.div) + ')').join(', ')));
+          if (titles.length) body.appendChild(h('div', { class: 'card tight mb' }, '🏆 State champions: ' + titles.map((t) => t.year + ' (Division ' + U.roman(t.div) + ')').join(', ')));
           body.appendChild(table([
             { key: 'y', label: 'Season', render: (x) => x.year, cls: 'bold' },
             { key: 'r', label: 'Record', render: (x) => x.w + '-' + x.l, cls: 'num' },

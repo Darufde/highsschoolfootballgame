@@ -14,11 +14,12 @@
     { id: 'hub', label: 'Program Hub', icon: 'hub' },
     { id: 'roster', label: 'Roster', icon: 'roster' },
     { id: 'depth', label: 'Depth Chart', icon: 'depth' },
+    { id: 'staff', label: 'Coaching Staff', icon: 'staff' },
     { id: 'schedule', label: 'Schedule', icon: 'schedule' },
     { id: 'standings', label: 'League Standings', icon: 'standings' },
     { id: 'rankings', label: 'Rankings', icon: 'rankings' },
     { id: 'playoffs', label: 'Playoffs', icon: 'playoffs' },
-    { id: 'schools', label: 'Ohio Schools', icon: 'schools' },
+    { id: 'schools', label: 'Schools', icon: 'schools' },
     { id: 'program', label: 'Program & Facilities', icon: 'program' },
     { id: 'history', label: 'History', icon: 'history' },
     { id: 'settings', label: 'Settings', icon: 'settings' },
@@ -44,8 +45,18 @@
   }
 
   function valid(s) {
-    return s && s.version === 1 && Array.isArray(s.schools) && Array.isArray(s.roster) && s.userId;
+    return s && s.version === Season.SAVE_VERSION && Array.isArray(s.schools) && Array.isArray(s.roster) && s.userId;
   }
+
+  // A save from an earlier version of the game that can no longer be loaded.
+  App.hasOldSave = function () {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      return !!raw && !readSave();
+    } catch (e) {
+      return false;
+    }
+  };
 
   App.save = function (quiet) {
     if (!App.state) return false;
@@ -101,6 +112,10 @@
       reader.onload = () => {
         try {
           const s = JSON.parse(reader.result);
+          if (s && s.version && s.version !== Season.SAVE_VERSION) {
+            toast('That save is from an older version of the game and can\u2019t be loaded.', 'bad', 6000);
+            return;
+          }
           if (!valid(s)) throw new Error('not a save file');
           App.start(s);
           App.save(true);
@@ -179,7 +194,7 @@
       items.push(h('button', { type: 'button', class: 'start-item', onclick: () => { closeStart(); App.save(); } }, h('span', { class: 'glyph' }, icon('save', 18)), 'Save Game'));
       items.push(h('button', { type: 'button', class: 'start-item', onclick: () => { closeStart(); App.toTitle(); } }, h('span', { class: 'glyph' }, icon('football', 18)), 'Main Menu'));
     } else {
-      items.push(h('div', { class: 'start-head' }, h('div', null, h('div', { class: 't' }, 'Friday Night Gridiron'), h('div', { class: 's' }, 'Ohio High School Football'))));
+      items.push(h('div', { class: 'start-head' }, h('div', null, h('div', { class: 't' }, 'Friday Night Gridiron'), h('div', { class: 's' }, 'High School Football'))));
       items.push(h('button', { type: 'button', class: 'start-item', onclick: () => { closeStart(); App.toTitle(); } }, h('span', { class: 'glyph' }, icon('football', 18)), 'Main Menu'));
     }
     startEl = h('div', { class: 'start-menu', role: 'menu' }, items);
@@ -260,7 +275,7 @@
     if (!st) return '';
     if (st.phase === 'offseason') return 'Offseason';
     const g = Season.userGame(st);
-    if (g && !g.played) return 'Game Day';
+    if (g && !g.played) return 'Sim Game';
     return 'Advance Week';
   };
 
@@ -269,7 +284,7 @@
     if (!st || App.busy) return;
     if (st.phase === 'offseason') return Win.offseason();
     const g = Season.userGame(st);
-    if (g && !g.played) return Win.game(g.id);
+    if (g && !g.played) return App.simGame(g.id);
     App.advanceWeek();
   };
 
@@ -294,7 +309,9 @@
   };
 
   function afterWeek(st, week) {
-    if (week === 10 && st.phase === 'playoffs') {
+    if (week === 10 && st.phase === 'playoffs' && Season.user(st).state === 'KY') {
+      toast('Regular season complete. Kentucky\u2019s KHSAA playoffs are not in the game yet.', 'warn', 6000);
+    } else if (week === 10 && st.phase === 'playoffs') {
       const u = Season.user(st);
       toast(u.rec.seed ? 'Playoffs! ' + u.name + ' is the No. ' + u.rec.seed + ' seed in Region ' + u.region + '.' : u.name + ' missed the playoffs.', u.rec.seed ? 'good' : 'warn', 6000);
       if (u.rec.seed) Win.playoffs();
@@ -303,13 +320,20 @@
     App.changed();
   }
 
-  App.quickSimUserGame = function (gameId) {
+  // The one button: simulate the user's game (and everyone else's), then show the box score.
+  App.simGame = function (gameId) {
     const st = App.state;
     const game = st.games.find((g) => g.id === gameId);
-    if (!game || game.played) return;
-    Season.simGame(st, game);
-    App.advanceWeek();
-    Win.box(game.id);
+    if (!game || game.played || App.busy) return;
+    App.busy = true;
+    busy(true, 'Simulating week ' + st.week + '\u2026', 40);
+    setTimeout(() => {
+      Season.simGame(st, game);
+      App.busy = false;
+      busy(false);
+      App.advanceWeek();
+      Win.box(game.id);
+    }, 20);
   };
 
   // Simulate weeks in chunks so the UI stays responsive.

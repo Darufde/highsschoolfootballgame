@@ -36,7 +36,7 @@
         const st = App.state;
         const lineup = Team.resolveLineup(st.roster, st.depth);
         st.depth = lineup.depth;
-        const r = Team.unitRatings(lineup, st.program.facilities);
+        const r = Team.unitRatings(lineup, Team.userEffects(st), st.program.facilities);
         const units = ['qb', 'rb', 'wr', 'ol', 'dl', 'lb', 'db', 'k', 'p'];
         body.appendChild(h('div', { class: 'row between mb' },
           h('div', { class: 'row' },
@@ -51,7 +51,7 @@
           body.appendChild(h('div', { class: 'card tight mb', style: { borderColor: 'rgba(245,158,11,.4)' } }, h('span', { class: 'warn-t bold' }, lineup.twoWay.size + ' two-way starter' + (lineup.twoWay.size > 1 ? 's' : '') + '. '), h('span', { class: 'small muted' }, 'Players starting on both sides of the ball play at about 96% to account for fatigue.')));
         }
         const sorted = {};
-        const healthy = st.roster.filter((p) => p.injury <= 0);
+        const healthy = Team.eligible(st.roster);
         const offIds = new Set();
         const defIds = new Set();
         for (const [pos] of Team.SLOTS.offense) for (const id of st.depth[pos]) offIds.add(id);
@@ -83,12 +83,12 @@
         }
         grid.appendChild(rightCol);
         body.appendChild(grid);
-        const injured = st.roster.filter((p) => p.injury > 0);
+        const injured = st.roster.filter((p) => p.injury > 0 && p.level === 'V');
         if (injured.length) {
           body.appendChild(h('div', { class: 'card mt' }, h('h3', { class: 'sect' }, 'Injured — unavailable'),
             h('div', { class: 'small' }, injured.map((p) => '#' + p.num + ' ' + Players.shortName(p) + ' (' + p.pos + ', ' + p.injury + 'w)').join(' · '))));
         }
-        body.appendChild(h('p', { class: 'help' }, 'Choosing a player who already starts elsewhere on the same side swaps the two. Injured starters are replaced automatically on game day.'));
+        body.appendChild(h('p', { class: 'help' }, 'Only healthy varsity players appear here — move players up from JV or the freshman team in the Roster window. Choosing a player who already starts elsewhere on the same side swaps the two. Injured starters are replaced automatically on game day.'));
       },
     });
   };

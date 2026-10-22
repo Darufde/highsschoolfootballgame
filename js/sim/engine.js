@@ -90,9 +90,21 @@
     };
   }
 
+  // Player-scale ratings (99 = Hall of Fame pro) mapped onto the engine's calibrated range.
+  // Typical varsity units sit near 43 (kickers near 50); the engine was tuned around 59 / 52.
+  function toEngine(v, key) {
+    if (key === 'k' || key === 'p') return 52 + (v - 50) * 1.3;
+    return 59 + (v - 43) * 1.55;
+  }
+
   function prepTeam(t, idx, opts) {
     const team = Object.assign({}, t);
-    team.r = Object.assign({}, t.r);
+    team.r = {};
+    for (const k in t.r) team.r[k] = toEngine(t.r[k], k);
+    team.offIQ = t.offIQ || 0;
+    team.defIQ = t.defIQ || 0;
+    team.offStyle = t.offStyle || { pass: 0, option: 0 };
+    team.defStyle = t.defStyle || {};
     team.out = new Set();
     if (!opts.neutral && idx === 0) {
       const bonus = 1.5 + (opts.homeBonus || 0);
@@ -937,7 +949,7 @@
     for (const [ti, p] of [[o, offPlayer], [1 - o, defPlayer]]) {
       const t = g.teams[ti];
       if (!t.injuries || !p || t.out.has(p.id) || p.id.startsWith('T')) continue;
-      const chance = 0.0045 * (1 - (t.medical - 1) * 0.08);
+      const chance = 0.0045 * (t.injuryMult || 1);
       if (!g.rng.chance(chance)) continue;
       const weeks = g.rng.weighted([[1, 40], [2, 25], [3, 14], [4, 10], [6, 7], [10, 4]]);
       t.out.add(p.id);
@@ -952,8 +964,15 @@
     aiTimeouts(g, userTeam);
     if (!preSnap(g)) return;
     const o = g.poss;
-    const offCall = userOff || aiOffCall(g);
-    const defCall = userDef || aiDefCall(g);
+    let offCall = userOff || aiOffCall(g);
+    let defCall = userDef || aiDefCall(g);
+    // Sharp coordinators read the other sideline and check into a better call.
+    const kind = CALL[offCall].kind;
+    if (kind !== 'special') {
+      const pickedOff = offCall;
+      if (!userOff && g.rng.chance(g.teams[o].offIQ)) offCall = bestOffense(defCall, kind);
+      if (!userDef && g.rng.chance(g.teams[1 - o].defIQ)) defCall = bestDefense(pickedOff);
+    }
     g.lastCalls = { off: offCall, def: defCall, team: o };
     if (offCall === 'punt') return doPunt(g);
     if (offCall === 'fg') return doFieldGoal(g);
@@ -975,6 +994,37 @@
   /* ------------------------------------------------------------------ */
   /* AI coaching                                                         */
   /* ------------------------------------------------------------------ */
+  function callValue(m) {
+    return (m.yd || 0) + (m.cmp || 0) * 25 - (m.sack || 0) * 40 + (m.big || 0) * 30 - (m.int || 0) * 80;
+  }
+
+  function bestOffense(defCall, kind) {
+    let best = null;
+    let bv = -Infinity;
+    for (const c of OFF_CALLS) {
+      if (c.kind !== kind) continue;
+      const v = callValue(mod(defCall, c.id));
+      if (v > bv) {
+        bv = v;
+        best = c.id;
+      }
+    }
+    return best;
+  }
+
+  function bestDefense(offCall) {
+    let best = 'base';
+    let bv = -Infinity;
+    for (const d of DEF_CALLS) {
+      if (d.id === 'prevent') continue;
+      const v = -callValue(mod(d.id, offCall));
+      if (v > bv) {
+        bv = v;
+        best = d.id;
+      }
+    }
+    return best;
+  }
   function aiKick(g, k) {
     const diff = g.score[k] - g.score[1 - k];
     if (g.quarter === 4 && g.clock < 160 && diff < 0 && diff >= -16) return 'onside';
@@ -1052,7 +1102,8 @@
     }
     if (g.down === 4) return aiFourth(g);
 
-    let p = U.clamp(0.38 + (O.qb + O.wr - O.rb - O.ol) * 0.006, 0.2, 0.62);
+    const style = g.teams[o].offStyle;
+    let p = U.clamp(0.38 + (O.qb + O.wr - O.rb - O.ol) * 0.006 + style.pass, 0.15, 0.7);
     if (g.down === 3 && g.togo >= 7) p += 0.35;
     else if (g.down === 3 && g.togo <= 2) p -= 0.3;
     if (g.down === 2 && g.togo >= 8) p += 0.12;
@@ -1080,7 +1131,7 @@
       }
       return rng.weighted(w);
     }
-    const w = { run_in: 4, run_out: 3, option: O.qb >= O.rb - 4 ? 1.5 : 0.6 };
+    const w = { run_in: 4, run_out: 3, option: Math.max(0.2, (O.qb >= O.rb - 4 ? 1.5 : 0.6) + style.option) };
     if (g.togo <= 2) w.run_in += 4;
     return rng.weighted(w);
   }
@@ -1111,6 +1162,8 @@
     }
     const O = g.teams[g.poss].r;
     if (O.rb + O.ol > O.qb + O.wr + 8) w.run_stop += 1;
+    const style = g.teams[d].defStyle;
+    for (const k in w) if (style[k]) w[k] += style[k];
     return g.rng.weighted(w);
   }
 
@@ -1160,18 +1213,6 @@
     return g;
   }
 
-  function suggest(g, side) {
-    const saved = g.rng.state;
-    const call = side === 'offense' ? aiOffCall(g) : aiDefCall(g);
-    g.rng.state = saved;
-    return call;
-  }
-
-  function fieldGoalInfo(g) {
-    const dist = 100 - g.spot + 17;
-    return { dist, prob: fgProb(g, dist, g.teams[g.poss].r.k) };
-  }
-
   function totals(g, ti) {
     const s = g.stats[ti];
     return Object.assign({}, s, { totalYds: s.rushYds + s.passYds - s.sackYds, turnovers: s.int + s.fumLost });
@@ -1179,6 +1220,6 @@
 
   FNG.Engine = {
     QLEN, OFF_CALLS, DEF_CALLS, CALL, WEATHER,
-    create, step, pending, simToEnd, callTimeout, suggest, situation, spotText, fieldGoalInfo, totals, periodLabel,
+    create, step, pending, simToEnd, situation, spotText, totals, periodLabel, toEngine,
   };
 })();

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const FNG = window.FNG;
-  const { U, Season, World, Team, Players } = FNG;
+  const { U, Season, World, Team, Players, Coaches } = FNG;
   const { h, icon, badge, table, seg, tabs, ovrChip, stars, toast } = FNG.UI;
   const WM = FNG.WM;
   const App = FNG.App;
@@ -71,14 +71,19 @@
         const steps = Season.OFFSEASON_STEPS;
         body.appendChild(h('div', { class: 'row mb', style: { gap: '6px' } }, steps.map((name, i) => h('span', { class: 'tag ' + (i === O.step ? 'team' : i < O.step ? 'good' : '') }, (i + 1) + '. ' + name))));
         const next = (label) => h('div', { class: 'row end mt' }, h('button', { type: 'button', class: 'btn primary lg', onclick: () => {
-          Season.offseasonNext(st);
-          if (st.phase !== 'offseason') {
-            WM.close('offseason', true);
-            toast('Welcome to the ' + st.year + ' season!', 'good', 5000);
-            Win.hub();
-            Win.schedule();
-          }
-          App.changed();
+          const last = O.step === Season.OFFSEASON_STEPS.length - 1;
+          if (last) FNG.UI.busy(true, 'Building the ' + (st.year + 1) + ' season\u2026', 50);
+          setTimeout(() => {
+            Season.offseasonNext(st);
+            FNG.UI.busy(false);
+            if (st.phase !== 'offseason') {
+              WM.close('offseason', true);
+              toast('Welcome to the ' + st.year + ' season!', 'good', 5000);
+              Win.hub();
+              Win.schedule();
+            }
+            App.changed();
+          }, last ? 30 : 0);
         } }, label, icon('calendarNext', 15)));
 
         if (O.step === 0) {
@@ -94,19 +99,22 @@
                 { key: 'n', label: 'Player', render: (a) => h('button', { type: 'button', class: 'linklike', onclick: () => Win.player(a.id) }, a.name) },
                 { key: 'p', label: 'Pos', render: (a) => a.pos },
                 { key: 'y', label: 'Yr', render: (a) => a.year },
-                { key: 'h', label: 'Honor', render: (a) => h('span', { class: 'tag ' + (a.honor === 'All-Ohio' ? 'gold' : 'info') }, a.honor) },
+                { key: 'h', label: 'Honor', render: (a) => h('span', { class: 'tag ' + (a.honor === 'All-State' ? 'gold' : 'info') }, a.honor) },
               ], O.awards) : h('div', { class: 'muted small' }, 'No players earned postseason honors this year.')),
-            h('div', { class: 'card' }, h('h3', { class: 'sect' }, st.year + ' State Champions'),
+            h('div', { class: 'card' }, h('h3', { class: 'sect' }, st.year + ' Ohio State Champions'),
               champs.map((c) => h('div', { class: 'row nowrap', style: { marginBottom: '6px' } }, h('span', { class: 'tag gold' }, 'D-' + U.roman(c.div)), badge(Season.school(st, c.id), st, 'sm'), h('button', { type: 'button', class: 'linklike', onclick: () => Win.school(c.id) }, c.name))))));
           body.appendChild(next('Graduation'));
         } else if (O.step === 1) {
-          body.appendChild(h('p', { class: 'muted' }, O.graduates.length + ' seniors graduate from ' + u.name + '. Thank you, seniors.'));
+          const d1 = O.graduates.filter((g) => g.tier >= 3).length;
+          body.appendChild(h('p', { class: 'muted' }, O.graduates.length + ' seniors graduate from ' + u.name + (d1 ? ', including ' + d1 + ' Division I prospect' + (d1 > 1 ? 's' : '') : '') + '. Thank you, seniors.'));
           body.appendChild(table([
             { key: 'n', label: 'Player', render: (g) => h('span', { class: 'bold' }, g.name) },
             { key: 'p', label: 'Pos', render: (g) => g.pos },
             { key: 'o', label: 'Ovr', render: (g) => ovrChip(g.ovr), cls: 'c' },
+            { key: 'c', label: 'Ceiling', render: (g) => ovrChip(g.pot), cls: 'c' },
+            { key: 'nl', label: 'Next Level', render: (g) => h('span', { class: 'tag ' + (g.tier >= 4 ? 'gold' : g.tier >= 2 ? 'info' : '') }, g.outlook) },
             { key: 'h', label: 'Honors', render: (g) => g.honors.join(', ') || '—', cls: 'muted' },
-          ], O.graduates.sort((a, b) => b.ovr - a.ovr), { empty: 'No seniors this year.' }));
+          ], O.graduates.sort((a, b) => b.tier - a.tier || b.ovr - a.ovr), { empty: 'No seniors this year.' }));
           body.appendChild(next('Player Development'));
         } else if (O.step === 2) {
           const avg = U.avg(O.development.map((d) => d.delta));
@@ -130,16 +138,25 @@
             { key: 'o', label: 'Ovr', render: (p) => ovrChip(p.ovr), cls: 'c' },
             { key: 's', label: 'Potential', render: (p) => stars(p.stars) },
             { key: 'f', label: 'From', render: (p) => h('span', { class: 'tag ' + (p.origin === 'Transfer' ? 'info' : '') }, p.origin) },
+            { key: 't', label: 'Team', render: (p) => Players.LEVEL_NAME[p.level] },
           ], O.incoming.slice().sort((a, b) => b.stars - a.stars || b.ovr - a.ovr)));
+          if (O.promoted) body.appendChild(h('p', { class: 'help' }, O.promoted + ' player' + (O.promoted > 1 ? 's were' : ' was') + ' promoted to varsity to replace the graduating class. Adjust teams any time in the Roster window.'));
           if (O.departures && O.departures.length) {
             body.appendChild(h('p', { class: 'help' }, O.departures.length + ' player' + (O.departures.length > 1 ? 's' : '') + ' buried on the depth chart decided to move on: ' + O.departures.join(', ') + '.'));
           }
-          body.appendChild(next('Program Budget'));
+          body.appendChild(next('Staff & Budget'));
         } else {
+          const vacant = Coaches.ROLES.filter((r) => !st.staff[r.id]);
+          const pay = Coaches.payroll(st.staff);
           body.appendChild(h('div', { class: 'card accent mb' }, h('div', { class: 'bold', style: { fontSize: '16px' } }, U.money(O.budgetAdded) + ' added to program funds'),
-            h('div', { class: 'small muted' }, 'You now have ' + U.money(st.program.funds) + '. Spend it on facilities before the season starts — or save up for a big upgrade.'),
-            h('div', { class: 'row mt' }, h('button', { type: 'button', class: 'btn', onclick: () => Win.program() }, icon('program', 15), 'Open Program & Facilities'))));
-          body.appendChild(h('p', { class: 'muted small' }, 'Starting the new season generates a fresh schedule, updates every program across Ohio, and resets the standings.'));
+            h('div', { class: 'small muted' }, 'You now have ' + U.money(st.program.funds) + '. Staff payroll of ' + U.money(pay) + ' is due when the season starts. Spend the rest on facilities or coaches.'),
+            h('div', { class: 'row mt' },
+              h('button', { type: 'button', class: 'btn', onclick: () => Win.staff() }, icon('staff', 15), 'Coaching Staff'),
+              h('button', { type: 'button', class: 'btn', onclick: () => Win.program() }, icon('program', 15), 'Program & Facilities'))));
+          body.appendChild(h('div', { class: 'card mb' }, h('h3', { class: 'sect' }, 'Staff Changes'),
+            O.staffChanges.length ? O.staffChanges.map((c) => h('div', { class: 'small' }, Coaches.ROLE[c.role].title + ' ' + c.name + ' ' + c.why + '.')) : h('div', { class: 'small muted' }, 'Your whole staff is returning.'),
+            vacant.length ? h('div', { class: 'small warn-t mt' }, 'Open positions: ' + vacant.map((r) => r.title).join(', ') + '. Empty seats hurt development and game day.') : null));
+          body.appendChild(h('p', { class: 'muted small' }, 'Starting the new season ages every program in Ohio and Kentucky by a year, generates a fresh schedule and resets the standings.'));
           body.appendChild(next('Begin ' + (st.year + 1) + ' Season'));
         }
       },
@@ -156,7 +173,7 @@
       render(body, w) {
         const st = App.state;
         const C = st.coach;
-        body.appendChild(tabs([{ value: 'program', label: 'My Program' }, { value: 'champions', label: 'State Champions' }], w.state.tab, (v) => { w.state.tab = v; WM.refresh(w.id); }));
+        body.appendChild(tabs([{ value: 'program', label: 'My Program' }, { value: 'champions', label: 'Ohio State Champions' }], w.state.tab, (v) => { w.state.tab = v; WM.refresh(w.id); }));
         if (w.state.tab === 'program') {
           body.appendChild(h('div', { class: 'grid c4 mb' },
             FNG.UI.stat('Career Record', C.wins + '-' + C.losses, C.seasons + ' completed season' + (C.seasons === 1 ? '' : 's')),
@@ -200,10 +217,6 @@
               h('button', { type: 'button', class: 'btn primary', onclick: () => App.save() }, icon('save', 15), 'Save Now'),
               h('button', { type: 'button', class: 'btn', onclick: () => App.exportSave() }, 'Export Save'),
               h('button', { type: 'button', class: 'btn', onclick: () => App.importSave() }, 'Import Save'))));
-          body.appendChild(h('div', { class: 'card mb' }, h('h3', { class: 'sect' }, 'Game Day'),
-            h('div', { class: 'row between mb' }, h('span', null, 'Default play speed'), seg([{ value: 'slow', label: 'Slow' }, { value: 'normal', label: 'Normal' }, { value: 'fast', label: 'Fast' }], st.settings.speed, (v) => { st.settings.speed = v; App.changed(); })),
-            h('div', { class: 'row between mb' }, h('span', null, 'Coordinator calls offense'), seg([{ value: true, label: 'On' }, { value: false, label: 'Off' }], !!st.settings.autoOffense, (v) => { st.settings.autoOffense = v; App.changed(); })),
-            h('div', { class: 'row between' }, h('span', null, 'Coordinator calls defense'), seg([{ value: true, label: 'On' }, { value: false, label: 'Off' }], st.settings.autoDefense !== false, (v) => { st.settings.autoDefense = v; App.changed(); }))));
           body.appendChild(h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Program'),
             h('div', { class: 'row' },
               h('button', { type: 'button', class: 'btn', onclick: () => App.toTitle() }, 'Main Menu'),

@@ -69,7 +69,7 @@
         let bestScore = Infinity;
         for (const t of free) {
           if (t === s || !open.has(t.id) || t.leagueId === s.leagueId || played[s.id].has(t.id)) continue;
-          const score = U.distKm(s, t) + 28 * Math.abs(s.division - t.division) + rng.next() * 25;
+          const score = U.distKm(s, t) + 28 * Math.abs(s.tier - t.tier) + rng.next() * 25;
           if (score < bestScore) {
             bestScore = score;
             best = t;

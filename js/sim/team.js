@@ -1,8 +1,8 @@
-/* Team composition: depth charts, lineups, unit ratings for user and AI schools. */
+/* Team composition: depth charts, lineups, unit ratings and engine contexts for every school. */
 (function () {
   'use strict';
   const FNG = window.FNG;
-  const { RNG, U } = FNG;
+  const { U } = FNG;
   const P = FNG.Players;
 
   const SLOTS = {
@@ -22,38 +22,37 @@
     return Math.round(s);
   }
 
-  // Fill one side of the ball. `used` holds players already starting on this side.
-  function fillSide(roster, slots, used, otherSide, current) {
+  // Only healthy varsity players can be on the varsity depth chart.
+  function eligible(roster) {
+    return roster.filter((p) => p.injury <= 0 && (p.level || 'V') === 'V');
+  }
+
+  function fillSide(pool, slots, used, otherSide, current) {
     const out = {};
-    const healthy = roster.filter((p) => p.injury <= 0);
-    // Keep valid current picks first.
     for (const [pos, n] of slots) {
       out[pos] = [];
-      const keep = (current && current[pos]) || [];
-      for (const id of keep) {
+      for (const id of (current && current[pos]) || []) {
         if (out[pos].length >= n) break;
-        const p = healthy.find((x) => x.id === id);
+        const p = pool.find((x) => x.id === id);
         if (p && !used.has(p.id)) {
           out[pos].push(p.id);
           used.add(p.id);
         }
       }
     }
-    // Primary-position players next.
     for (const [pos, n] of slots) {
-      const cands = healthy.filter((p) => p.pos === pos && !used.has(p.id)).sort((a, b) => P.ovrAt(b, pos) - P.ovrAt(a, pos));
+      const cands = pool.filter((p) => p.pos === pos && !used.has(p.id)).sort((a, b) => P.ovrAt(b, pos) - P.ovrAt(a, pos));
       while (out[pos].length < n && cands.length) {
         const p = cands.shift();
         out[pos].push(p.id);
         used.add(p.id);
       }
     }
-    // Anyone else, preferring players not already starting on the other side.
     for (const [pos, n] of slots) {
       while (out[pos].length < n) {
         let best = null;
         let bv = -Infinity;
-        for (const p of healthy) {
+        for (const p of pool) {
           if (used.has(p.id)) continue;
           const v = P.ovrAt(p, pos) - (otherSide && otherSide.has(p.id) ? 6 : 0) - (p.pos === 'K' || p.pos === 'P' ? 10 : 0);
           if (v > bv) {
@@ -71,21 +70,19 @@
 
   // Build a full depth chart. With `current`, valid existing choices are preserved.
   function autoDepth(roster, current) {
+    const pool = eligible(roster);
     const usedOff = new Set();
-    const usedDef = new Set();
-    const off = fillSide(roster, SLOTS.offense, usedOff, null, current);
-    const def = fillSide(roster, SLOTS.defense, usedDef, usedOff, current);
+    const off = fillSide(pool, SLOTS.offense, usedOff, null, current);
+    const def = fillSide(pool, SLOTS.defense, new Set(), usedOff, current);
     const depth = Object.assign({}, off, def);
     for (const [pos] of SLOTS.special) {
-      const healthy = roster.filter((p) => p.injury <= 0);
-      const keep = current && current[pos] && healthy.find((p) => p.id === current[pos][0]);
-      const best = keep || healthy.slice().sort((a, b) => P.ovrAt(b, pos) - P.ovrAt(a, pos))[0];
+      const keep = current && current[pos] && pool.find((p) => p.id === current[pos][0]);
+      const best = keep || pool.slice().sort((a, b) => P.ovrAt(b, pos) - P.ovrAt(a, pos))[0];
       depth[pos] = best ? [best.id] : [];
     }
     return depth;
   }
 
-  // Resolve the game-day lineup: injured starters are replaced automatically.
   function resolveLineup(roster, depth) {
     const fixed = autoDepth(roster, depth);
     const byId = {};
@@ -104,10 +101,11 @@
     return { depth: fixed, groups, twoWay };
   }
 
-  function unitRatings(lineup, facilities) {
+  // Unit ratings on the player scale, including coaching (fx) and film room bonuses.
+  function unitRatings(lineup, fx, facilities) {
     const g = lineup.groups;
-    const val = (p, pos) => (p ? P.ovrAt(p, pos) * (lineup.twoWay.has(p.id) ? 0.965 : 1) : 25);
-    const avgOf = (pos) => U.avg((g[pos] || []).map((p) => val(p, pos))) || 25;
+    const val = (p, pos) => (p ? P.ovrAt(p, pos) * (lineup.twoWay.has(p.id) ? 0.965 : 1) : 12);
+    const avgOf = (pos) => U.avg((g[pos] || []).map((p) => val(p, pos))) || 12;
     const wr = g.WR || [];
     const r = {
       qb: val(g.QB && g.QB[0], 'QB'),
@@ -116,46 +114,30 @@
       ol: avgOf('OL'),
       dl: avgOf('DL'),
       lb: avgOf('LB'),
-      db: U.avg([...(g.CB || []).map((p) => val(p, 'CB')), ...(g.S || []).map((p) => val(p, 'S'))]) || 25,
+      db: U.avg([...(g.CB || []).map((p) => val(p, 'CB')), ...(g.S || []).map((p) => val(p, 'S'))]) || 12,
       k: val(g.K && g.K[0], 'K'),
       p: val(g.P && g.P[0], 'P'),
     };
     const film = facilities ? (facilities.film - 1) * 0.35 : 0;
-    for (const k in r) r[k] = U.round1(r[k] + (k === 'k' || k === 'p' ? 0 : film));
+    for (const k in r) r[k] = U.round1(r[k] + (fx ? fx.units[k] : 0) + (k === 'k' || k === 'p' ? 0 : film));
     return r;
   }
 
-  function userRatings(state) {
-    const lineup = resolveLineup(state.roster, state.depth);
-    return unitRatings(lineup, state.program.facilities);
-  }
-
-  /* AI programs ------------------------------------------------------ */
   function sizeBonus(enrollment) {
     return U.clamp(Math.log2(enrollment / 300) * 3.5, -4, 9);
   }
 
-  function aiBase(school) {
-    return 43 + school.prestige * 0.3 + sizeBonus(school.enrollment) + (school.type === 'private' ? 2 : 0);
+  // Expected overall of an average junior in a program: tradition, size and youth program.
+  function programTalent(school, facilities) {
+    return 28 + (school.prestige - 50) * 0.14 + sizeBonus(school.enrollment) * 0.5 + (school.type === 'private' ? 1.5 : 0) + (facilities ? (facilities.youth - 1) * 1 : 0);
   }
 
-  function aiRatings(school, rng, previous) {
-    const base = aiBase(school) + rng.normal(0, 4.5);
-    const r = {};
-    for (const k of ['qb', 'rb', 'wr', 'ol', 'dl', 'lb', 'db']) r[k] = base + rng.normal(0, 5);
-    r.k = base * 0.85 + rng.normal(0, 9);
-    r.p = base * 0.85 + rng.normal(0, 8);
-    for (const k in r) {
-      let v = r[k];
-      if (previous && previous[k] != null) v = previous[k] * 0.42 + v * 0.58;
-      r[k] = U.round1(U.clamp(v, 22, 96));
-    }
-    return r;
+  function userEffects(state) {
+    return FNG.Coaches.effects(state.staff);
   }
 
-  // Talent level used to generate the user's players (expected junior overall).
-  function userTalent(school, facilities) {
-    return aiBase(school) - 5 - sizeBonus(school.enrollment) * 0.35 + (facilities ? (facilities.youth - 1) * 1.2 : 0) + (school.type === 'private' ? 1 : 0);
+  function userRatings(state) {
+    return unitRatings(resolveLineup(state.roster, state.depth), userEffects(state), state.program.facilities);
   }
 
   /* Engine contexts --------------------------------------------------- */
@@ -163,17 +145,14 @@
     return { id: p.id, name: P.shortName(p), num: p.num, pos: pos || p.pos };
   }
 
-  function userContext(state, school) {
-    const lineup = resolveLineup(state.roster, state.depth);
-    const ratings = unitRatings(lineup, state.program.facilities);
+  function buildContext(school, roster, depth, fx, facilities) {
+    const lineup = resolveLineup(roster, depth);
     const g = lineup.groups;
-    const healthy = state.roster.filter((p) => p.injury <= 0);
+    const pool = eligible(roster);
     const bench = (pos, starters) => {
       const ids = new Set(starters.map((p) => p.id));
-      return healthy
-        .filter((p) => !ids.has(p.id) && (p.pos === pos || (pos === 'DB' && (p.pos === 'CB' || p.pos === 'S'))))
-        .sort((a, b) => P.ovrAt(b, pos === 'DB' ? 'CB' : pos) - P.ovrAt(a, pos === 'DB' ? 'CB' : pos))
-        .slice(0, 3);
+      const match = (p) => p.pos === pos || (pos === 'DB' && (p.pos === 'CB' || p.pos === 'S'));
+      return pool.filter((p) => !ids.has(p.id) && match(p)).sort((a, b) => P.ovr(b) - P.ovr(a)).slice(0, 3);
     };
     const grp = (pos, list) => list.concat(bench(pos, list)).map((p) => playerRef(p, pos === 'DB' ? p.pos : pos));
     const db = (g.CB || []).concat(g.S || []);
@@ -181,28 +160,42 @@
       id: school.id,
       name: school.name,
       abbr: school.abbr,
-      isUser: true,
-      injuries: true,
-      medical: state.program.facilities.medical,
-      colors: state.colors,
-      r: ratings,
+      r: unitRatings(lineup, fx, facilities),
+      offIQ: fx.offIQ,
+      defIQ: fx.defIQ,
+      offStyle: fx.offStyle,
+      defStyle: fx.defStyle,
       players: {
         QB: grp('QB', g.QB || []), RB: grp('RB', g.RB || []), WR: grp('WR', g.WR || []), TE: grp('TE', g.TE || []),
         OL: grp('OL', g.OL || []), DL: grp('DL', g.DL || []), LB: grp('LB', g.LB || []), DB: grp('DB', db),
         K: (g.K || []).map((p) => playerRef(p, 'K')), P: (g.P || []).map((p) => playerRef(p, 'P')),
       },
+      lineup,
     };
   }
 
-  function aiContext(school, year) {
-    const starters = P.opponentStarters(school, year, school.r);
-    const players = {};
-    for (const k in starters) players[k] = starters[k].map((p) => ({ id: p.id, name: P.shortName(p), num: p.num, pos: p.pos }));
-    return { id: school.id, name: school.name, abbr: school.abbr, isUser: false, injuries: false, r: Object.assign({}, school.r), players };
+  function userContext(state, school) {
+    const fx = userEffects(state);
+    const ctx = buildContext(school, state.roster, state.depth, fx, state.program.facilities);
+    ctx.isUser = true;
+    ctx.injuries = true;
+    ctx.injuryMult = fx.injury * (1 - (state.program.facilities.medical - 1) * 0.08);
+    return ctx;
+  }
+
+  function aiContext(school, roster) {
+    const ctx = buildContext(school, roster, null, FNG.Coaches.aiEffects(school), null);
+    ctx.isUser = false;
+    ctx.injuries = false;
+    return ctx;
+  }
+
+  function aiRatings(school, roster) {
+    return unitRatings(resolveLineup(roster, null), FNG.Coaches.aiEffects(school), null);
   }
 
   FNG.Team = {
-    SLOTS, SIDE_OF, UNIT_LABEL, teamOverall, autoDepth, resolveLineup, unitRatings, userRatings,
-    aiRatings, aiBase, userTalent, userContext, aiContext, sizeBonus,
+    SLOTS, SIDE_OF, UNIT_LABEL, teamOverall, eligible, autoDepth, resolveLineup, unitRatings, userRatings, userEffects,
+    programTalent, sizeBonus, userContext, aiContext, aiRatings,
   };
 })();

@@ -1,9 +1,13 @@
-/* Season flow: new game, weekly simulation, standings, computer points, playoffs, offseason. */
+/*
+ * Season flow: new game, weekly simulation, varsity/JV/freshman results, standings,
+ * computer points, Ohio playoffs, coaching staff, offseason and the next season.
+ */
 (function () {
   'use strict';
   const FNG = window.FNG;
-  const { RNG, U, Team, Players, Engine, Schedule, World } = FNG;
+  const { RNG, U, Team, Players, Engine, Schedule, World, Coaches } = FNG;
 
+  const SAVE_VERSION = 2;
   const START_YEAR = 2026;
   const SIZE_ENROLL = { small: 240, medium: 600, large: 1200, xl: 2100 };
   const STATUS_PRESTIGE = { rebuild: 28, average: 50, established: 72 };
@@ -22,6 +26,8 @@
   const FOCUS = {
     balanced: 'Balanced', offense: 'Offensive Install', defense: 'Defensive Install', conditioning: 'Conditioning', film: 'Opponent Film Study',
   };
+  const OFFSEASON_STEPS = ['Season Recap', 'Graduation', 'Player Development', 'Incoming Class', 'Staff & Budget'];
+  const FOOTBALL_SCORES = [0, 3, 6, 7, 9, 10, 13, 14, 16, 17, 20, 21, 22, 24, 27, 28, 30, 31, 34, 35, 37, 38, 41, 42, 44, 45, 48, 49, 52, 55, 56, 58, 62];
 
   /* ------------------------------------------------------------------ */
   /* Lookup                                                              */
@@ -40,7 +46,7 @@
   const league = (state, id) => state.leagues.find((l) => l.id === id);
 
   function emptyRecord() {
-    return { w: 0, l: 0, lw: 0, ll: 0, pf: 0, pa: 0, streak: '', pw: 0, seed: 0, result: '' };
+    return { w: 0, l: 0, lw: 0, ll: 0, pf: 0, pa: 0, streak: '', pw: 0, seed: 0, result: '', yds: 0, ydsA: 0, to: 0, toF: 0, gp: 0 };
   }
 
   function addNews(state, text, kind) {
@@ -49,22 +55,60 @@
   }
 
   function budget(s) {
-    return s.type === 'private' ? 30000 + s.enrollment * 10 + s.prestige * 220 : 18000 + s.enrollment * 6 + s.prestige * 180;
-  }
-
-  function teamRatings(state, s) {
-    return s.isUser ? Team.userRatings(state) : s.r;
+    return s.type === 'private' ? 50000 + s.enrollment * 12 + s.prestige * 300 : 35000 + s.enrollment * 8 + s.prestige * 250;
   }
 
   function initialElo(r) {
-    return 1500 + (Team.teamOverall(r) - 60) * 15;
+    return 1500 + (Team.teamOverall(r) - 43) * 26;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* AI programs                                                         */
+  /* Rosters are rebuilt from seeds and each school's stored class        */
+  /* talent, so they live in memory only and never bloat the save.        */
+  /* ------------------------------------------------------------------ */
+  const aiCache = new WeakMap();
+
+  function aiDevMult(s) {
+    return 0.85 + s.staffQ / 250;
+  }
+
+  function aiCacheFor(state) {
+    let c = aiCache.get(state);
+    if (!c || c.year !== state.year) {
+      c = { year: state.year, rosters: {}, contexts: {} };
+      aiCache.set(state, c);
+    }
+    return c;
+  }
+
+  function aiRoster(state, s) {
+    const c = aiCacheFor(state);
+    if (!c.rosters[s.id]) c.rosters[s.id] = Players.aiRoster(s, state.year, aiDevMult(s));
+    return c.rosters[s.id];
+  }
+
+  // AI lineups don't change during a season, so their engine contexts are built once.
+  function aiContext(state, s) {
+    const c = aiCacheFor(state);
+    if (!c.contexts[s.id]) c.contexts[s.id] = Team.aiContext(s, aiRoster(state, s));
+    return c.contexts[s.id];
+  }
+
+  function classTalent(s, year) {
+    return Team.programTalent(s) + new RNG('ct|' + s.id + '|' + year).normal(0, 1.6);
+  }
+
+  function refreshAIRatings(state) {
+    for (const s of state.schools) if (!s.isUser) s.r = Team.aiRatings(s, aiRoster(state, s));
   }
 
   /* ------------------------------------------------------------------ */
   /* New game                                                            */
   /* ------------------------------------------------------------------ */
   function makeUserSchool(setup) {
-    const c = FNG.DATA.ohio.cities.find((x) => x.name === setup.city);
+    const stateKey = setup.state || 'OH';
+    const c = World.stateData(stateKey).cities.find((x) => x.name === setup.city);
     const r = new RNG('user|' + setup.name + '|' + setup.city);
     let enrollment = SIZE_ENROLL[setup.size];
     if (!enrollment) {
@@ -74,6 +118,7 @@
     const name = setup.name.trim();
     return {
       id: 'USER',
+      state: stateKey,
       name,
       city: c.name,
       county: c.county,
@@ -96,12 +141,13 @@
     const lg = world.leagues.find((l) => l.id === s.leagueId);
     const byId = {};
     for (const x of world.schools) byId[x.id] = x;
+    const sameState = world.schools.filter((x) => x.state === s.state);
     return {
       school: s,
       league: lg.name,
       leagueMates: lg.members.filter((id) => id !== s.id).map((id) => byId[id]),
-      regionSize: world.schools.filter((x) => x.region === s.region).length,
-      sameCity: world.schools.filter((x) => x.city === s.city && x.id !== s.id),
+      groupSize: s.state === 'KY' ? sameState.filter((x) => x.division === s.division).length : sameState.filter((x) => x.region === s.region).length,
+      sameCity: sameState.filter((x) => x.city === s.city && x.id !== s.id),
       nearby: world.schools
         .filter((x) => x.id !== s.id)
         .sort((a, b) => U.distKm(a, s) - U.distKm(b, s))
@@ -115,12 +161,12 @@
     World.placeUserSchool(world, s);
     const year = START_YEAR;
     const state = {
-      version: 1,
+      version: SAVE_VERSION,
       year,
       week: 1,
       phase: 'regular',
       userId: s.id,
-      coach: { name: setup.coach.trim() || 'Coach', wins: 0, losses: 0, playoffWins: 0, titles: 0, regionTitles: 0, leagueTitles: 0, seasons: 0 },
+      coach: { name: setup.coach.trim() || 'Coach', wins: 0, losses: 0, playoffWins: 0, titles: 0, regionTitles: 0, leagueTitles: 0, seasons: 0, prospects: 0 },
       colors: setup.colors,
       schools: world.schools,
       leagues: world.leagues,
@@ -128,12 +174,15 @@
       playoffs: null,
       roster: [],
       depth: {},
+      staff: {},
+      staffRefresh: {},
+      lower: { JV: { w: 0, l: 0 }, FR: { w: 0, l: 0 } },
       program: { funds: 0, facilities: { weight: 1, practice: 1, film: 1, stadium: 1, youth: 1, medical: 1 }, focus: 'balanced', revenue: 0 },
       news: [],
       history: [],
       champions: [],
       offseason: null,
-      settings: { autoSave: true, speed: 'normal', autoCall: false },
+      settings: { autoSave: true },
       created: Date.now(),
     };
     for (const x of state.schools) {
@@ -142,20 +191,29 @@
       x.rec = emptyRecord();
       x.cp = 0;
       if (!x.isUser) {
-        x.r = Team.aiRatings(x, new RNG('ai|' + x.id + '|' + year));
-        x.elo = initialElo(x.r);
+        x.staffQ = Math.round(U.clamp(34 + x.prestige * 0.3 + new RNG('staffq|' + x.id).normal(0, 7), 20, 85));
+        x.ct = {};
+        for (let y = year - 3; y <= year; y++) x.ct[y] = classTalent(x, y);
       }
     }
+    refreshAIRatings(state);
+    for (const x of state.schools) if (!x.isUser) x.elo = initialElo(x.r);
+
     const rng = new RNG();
-    state.roster = Players.generateRoster(rng, Team.userTalent(s, state.program.facilities), Players.rosterTarget(s.enrollment));
+    const size = Players.programTarget(s.enrollment);
+    state.roster = Players.generateProgram(rng, Team.programTalent(s, state.program.facilities), size);
+    Players.autoAssignLevels(state.roster, Players.varsityTarget(size));
+    Players.assignNumbers(rng, state.roster);
+    state.staff = Coaches.newStaff(rng, s.prestige);
     state.depth = Team.autoDepth(state.roster);
     s.elo = initialElo(Team.userRatings(state));
-    state.program.funds = budget(s);
+    const pay = Coaches.payroll(state.staff);
+    state.program.funds = budget(s) - pay;
     state.games = Schedule.generate(state.schools, state.leagues, year, state.userId);
     computeRatings(state);
     const lg = league(state, s.leagueId);
-    addNews(state, 'Coach ' + state.coach.name + ' takes over the ' + s.name + ' program. The ' + year + ' season opens ' + Schedule.weekDateStr(year, 1, true) + '.', 'big');
-    addNews(state, s.name + ' will compete in Division ' + U.roman(s.division) + ', Region ' + s.region + ', as a member of the ' + lg.name + '.');
+    addNews(state, 'Coach ' + state.coach.name + ' takes over the ' + s.name + ' program: ' + state.roster.length + ' players across varsity, JV and freshman teams. The ' + year + ' season opens ' + Schedule.weekDateStr(year, 1, true) + '.', 'big');
+    addNews(state, s.name + ' will compete in ' + World.divLabel(s) + (s.state === 'OH' ? ', Region ' + s.region + ',' : '') + ' as a member of the ' + lg.name + '. Staff payroll: ' + U.money(pay) + '.');
     return state;
   }
 
@@ -175,6 +233,9 @@
   function opponentOf(state, g, id) {
     return school(state, g.home === id ? g.away : g.home);
   }
+  function isUserGame(state, game) {
+    return game.home === state.userId || game.away === state.userId;
+  }
 
   function gameWeather(game) {
     return Schedule.weatherFor(new RNG('wx|' + game.id), game.week);
@@ -182,22 +243,17 @@
 
   function context(state, id) {
     const s = school(state, id);
-    return s.isUser ? Team.userContext(state, s) : Team.aiContext(s, state.year);
+    return s.isUser ? Team.userContext(state, s) : aiContext(state, s);
   }
 
   function engineGame(state, game, record) {
     const opts = { neutral: !!game.neutral, weather: gameWeather(game), record };
-    const fac = state.program.facilities;
-    if (game.home === state.userId) opts.homeBonus = (fac.stadium - 1) * 0.4;
-    if (state.program.focus === 'film') {
+    if (game.home === state.userId) opts.homeBonus = (state.program.facilities.stadium - 1) * 0.4;
+    if (state.program.focus === 'film' && isUserGame(state, game)) {
       opts.boost = [0, 0];
       opts.boost[game.home === state.userId ? 0 : 1] = 1;
     }
     return Engine.create(context(state, game.home), context(state, game.away), opts);
-  }
-
-  function isUserGame(state, game) {
-    return game.home === state.userId || game.away === state.userId;
   }
 
   function buildBox(g) {
@@ -222,8 +278,9 @@
     if (isUserGame(state, game)) {
       game.box = buildBox(g);
       applyUserGame(state, game, g);
+      if (!game.playoff) simLowerLevels(state, game);
     }
-    applyResult(state, game);
+    applyResult(state, game, g);
   }
 
   function simGame(state, game) {
@@ -235,18 +292,21 @@
 
   const STAT_KEYS = ['pAtt', 'pCmp', 'pYds', 'pTD', 'pInt', 'rAtt', 'rYds', 'rTD', 'rec', 'recYds', 'recTD', 'tkl', 'sck', 'dInt', 'fgm', 'fga', 'xpm', 'xpa', 'pnt', 'pntYds'];
 
+  function seasonStats(state, p) {
+    return (p.stats[state.year] = p.stats[state.year] || { gp: 0 });
+  }
+
   function applyUserGame(state, game, g) {
     const ui = game.home === state.userId ? 0 : 1;
     const byId = {};
     for (const p of state.roster) byId[p.id] = p;
-    const lineup = Team.resolveLineup(state.roster, state.depth);
     const appeared = new Set();
-    for (const pos in lineup.groups) for (const p of lineup.groups[pos]) appeared.add(p.id);
+    for (const pos in g.teams[ui].lineup.groups) for (const p of g.teams[ui].lineup.groups[pos]) appeared.add(p.id);
     for (const s of Object.values(g.pstats)) if (s.team === ui) appeared.add(s.id);
     for (const id of appeared) {
       const p = byId[id];
       if (!p) continue;
-      const season = (p.stats[state.year] = p.stats[state.year] || { gp: 0 });
+      const season = seasonStats(state, p);
       season.gp++;
       const s = g.pstats[id];
       if (s) for (const k of STAT_KEYS) if (s[k]) season[k] = (season[k] || 0) + s[k];
@@ -259,9 +319,8 @@
       p.injury = inj.weeks;
       p.injNew = true;
       p.injuryNote = inj.weeks >= 6 ? 'Season-threatening injury' : inj.weeks + ' week' + (inj.weeks > 1 ? 's' : '');
-      addNews(state, P_INJ(p, inj.weeks), 'injury');
+      addNews(state, Players.fullName(p) + ' (' + p.pos + ') was injured and is expected to miss ' + (inj.weeks >= 6 ? 'most of the season' : inj.weeks + ' week' + (inj.weeks > 1 ? 's' : '')) + '.', 'injury');
     }
-    // Gate revenue
     const s = user(state);
     let gate = 0;
     if (game.home === state.userId && !game.neutral) gate = 2500 + state.program.facilities.stadium * 900 + s.prestige * 25 + (game.playoff ? 3000 : 0);
@@ -272,8 +331,53 @@
     }
   }
 
-  function P_INJ(p, weeks) {
-    return Players.fullName(p) + ' (' + p.pos + ') was injured and is expected to miss ' + (weeks >= 6 ? 'most of the season' : weeks + ' week' + (weeks > 1 ? 's' : '')) + '.';
+  /* JV and freshman games: lightly simulated from each squad's strength. -- */
+  function snapScore(v) {
+    let best = 0;
+    for (const s of FOOTBALL_SCORES) if (Math.abs(s - v) < Math.abs(best - v)) best = s;
+    return best;
+  }
+
+  function squadStrength(players, bonus) {
+    const top = players.map(Players.ovr).sort((a, b) => b - a).slice(0, 22);
+    while (top.length < 22) top.push(8);
+    return U.avg(top) + bonus;
+  }
+
+  // Opponent JV/freshman strength, estimated from that program's class talent.
+  function opponentSquad(state, s, level) {
+    const t = (y) => (s.ct && s.ct[y] != null ? s.ct[y] : Team.programTalent(s));
+    const staff = ((s.staffQ || 50) - 50) * 0.06;
+    if (level === 'FR') return t(state.year) - 8.7 + 1.7 + 3.5 + staff;
+    return (t(state.year - 1) - 2.1 + t(state.year - 2) + 2.5) / 2 + 1.7 - 2.5 + staff;
+  }
+
+  function simLowerLevels(state, game) {
+    const fx = Team.userEffects(state);
+    const opp = opponentOf(state, game, state.userId);
+    const home = game.home === state.userId;
+    const rng = new RNG();
+    for (const level of ['JV', 'FR']) {
+      const players = state.roster.filter((p) => p.level === level && p.injury <= 0);
+      const key = level.toLowerCase();
+      if (players.length < 15) {
+        game[key] = { cancelled: true };
+        continue;
+      }
+      const us = squadStrength(players, level === 'JV' ? fx.jvGame : fx.frGame);
+      const them = opponentSquad(state, opp, level);
+      const margin = rng.normal((us - them) * 1.5 + (home ? 1.5 : -1.5), 12);
+      const total = U.clamp(rng.normal(36, 11), 6, 80);
+      let a = snapScore(Math.max(0, (total + margin) / 2));
+      let b = snapScore(Math.max(0, (total - margin) / 2));
+      if (a === b) {
+        if (margin >= 0) a += 3;
+        else b += 3;
+      }
+      game[key] = { us: a, them: b };
+      state.lower[level][a > b ? 'w' : 'l']++;
+      for (const p of players.sort((x, y) => Players.ovr(y) - Players.ovr(x)).slice(0, 30)) seasonStats(state, p).lgp = (seasonStats(state, p).lgp || 0) + 1;
+    }
   }
 
   function streakAdd(rec, won) {
@@ -282,7 +386,7 @@
     rec.streak = m && m[1] === c ? c + (Number(m[2]) + 1) : c + '1';
   }
 
-  function applyResult(state, game) {
+  function applyResult(state, game, g) {
     const h = school(state, game.home);
     const a = school(state, game.away);
     const hw = game.hs > game.as;
@@ -300,13 +404,22 @@
     h.rec.pa += game.as;
     a.rec.pf += game.as;
     a.rec.pa += game.hs;
+    if (g) {
+      const T = [Engine.totals(g, 0), Engine.totals(g, 1)];
+      [[h, 0], [a, 1]].forEach(([s, i]) => {
+        s.rec.gp++;
+        s.rec.yds += T[i].totalYds;
+        s.rec.ydsA += T[1 - i].totalYds;
+        s.rec.to += T[i].turnovers;
+        s.rec.toF += T[1 - i].turnovers;
+      });
+    }
     streakAdd(w.rec, true);
     streakAdd(l.rec, false);
     if (game.playoff) {
       w.rec.pw++;
       l.rec.result = 'Lost in ' + ROUND_NAMES[game.playoff.round];
     }
-    // Elo
     const adv = game.neutral ? 0 : 40;
     const exp = 1 / (1 + Math.pow(10, (a.elo - h.elo - adv) / 400));
     const k = 26 * (Math.log(Math.abs(game.hs - game.as) + 1) * 0.9 + 0.5);
@@ -328,7 +441,8 @@
   /* ------------------------------------------------------------------ */
   /* Rankings                                                            */
   /* ------------------------------------------------------------------ */
-  // OHSAA-style computer points: level 1 (wins by opponent division) + level 2 (wins of beaten opponents).
+  // OHSAA-style computer points: level 1 (wins by opponent size) + level 2 (wins of beaten opponents).
+  // Out-of-state opponents count at their Ohio-equivalent division.
   function computeRatings(state) {
     const L1 = {};
     const beat = {};
@@ -345,7 +459,7 @@
       if (!g.played) continue;
       const wId = g.hs > g.as ? g.home : g.away;
       const lId = g.hs > g.as ? g.away : g.home;
-      L1[wId] += DIV_PTS[school(state, lId).division];
+      L1[wId] += DIV_PTS[school(state, lId).tier];
       beat[wId].push(lId);
     }
     for (const s of state.schools) {
@@ -354,10 +468,8 @@
       s.cp = Math.round(((L1[s.id] + L2 / 10) / Math.max(1, sched[s.id])) * 10000) / 10000;
     }
     const regions = {};
-    for (const s of state.schools) (regions[s.region] = regions[s.region] || []).push(s);
-    for (const r in regions) {
-      regions[r].sort(cpSort).forEach((s, i) => (s.cpRank = i + 1));
-    }
+    for (const s of state.schools) if (s.region) (regions[s.region] = regions[s.region] || []).push(s);
+    for (const r in regions) regions[r].sort(cpSort).forEach((s, i) => (s.cpRank = i + 1));
   }
 
   function cpSort(a, b) {
@@ -368,17 +480,16 @@
     return state.schools.filter((s) => s.region === region).sort(cpSort);
   }
 
-  function poll(state, division) {
+  function poll(state, stateKey, division) {
     return state.schools
-      .filter((s) => !division || s.division === division)
+      .filter((s) => s.state === stateKey && (!division || s.division === division))
       .slice()
       .sort((a, b) => b.elo - a.elo)
       .slice(0, 25);
   }
 
   function pollRank(state, s, division) {
-    const list = poll(state, division);
-    const i = list.indexOf(s);
+    const i = poll(state, s.state, division).indexOf(s);
     return i >= 0 ? i + 1 : 0;
   }
 
@@ -390,7 +501,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Playoffs                                                            */
+  /* Ohio playoffs                                                       */
   /* ------------------------------------------------------------------ */
   function setupPlayoffs(state) {
     computeRatings(state);
@@ -411,8 +522,10 @@
     }
     state.playoffs = P;
     const u = user(state);
-    if (u.rec.seed) addNews(state, u.name + ' qualifies for the playoffs as the No. ' + u.rec.seed + ' seed in Division ' + U.roman(u.division) + ', Region ' + u.region + '!', 'big');
-    else addNews(state, u.name + ' finishes ' + U.ordinal(u.cpRank) + ' in Region ' + u.region + ' and misses the playoffs.', 'loss');
+    if (u.state === 'OH') {
+      if (u.rec.seed) addNews(state, u.name + ' qualifies for the playoffs as the No. ' + u.rec.seed + ' seed in Division ' + U.roman(u.division) + ', Region ' + u.region + '!', 'big');
+      else addNews(state, u.name + ' finishes ' + U.ordinal(u.cpRank) + ' in Region ' + u.region + ' and misses the playoffs.', 'loss');
+    }
     createPlayoffGames(state, 1);
   }
 
@@ -478,7 +591,7 @@
           if (D.champion) {
             const c = school(state, D.champion);
             c.rec.result = 'State Champion';
-            state.champions.push({ year: state.year, div, id: c.id, name: c.name });
+            state.champions.push({ year: state.year, state: 'OH', div, id: c.id, name: c.name });
           }
         }
       }
@@ -491,16 +604,18 @@
     if (round === 6) {
       for (let div = 1; div <= 7; div++) {
         const c = school(state, state.playoffs[div].champion);
-        if (c) addNews(state, c.name + ' wins the Division ' + U.roman(div) + ' state championship.', c.isUser ? 'big' : 'info');
+        if (c) addNews(state, c.name + ' wins the Ohio Division ' + U.roman(div) + ' state championship.', c.isUser ? 'big' : 'info');
       }
       if (u.rec.result === 'State Champion') state.coach.titles++;
     }
   }
 
+  // Whether the user still has games to play this season.
   function userAlive(state) {
-    if (state.phase !== 'playoffs') return state.phase === 'regular';
+    if (state.phase === 'regular') return true;
+    if (state.phase !== 'playoffs') return false;
     const u = user(state);
-    if (!u.rec.seed) return false;
+    if (u.state !== 'OH' || !u.rec.seed) return false;
     return !/^Lost/.test(u.rec.result) && u.rec.result !== 'State Champion';
   }
 
@@ -513,37 +628,49 @@
     postWeek(state);
   }
 
-  function postWeek(state) {
+  function practice(state) {
     const rng = new RNG();
     const fac = state.program.facilities;
+    const fx = Team.userEffects(state);
+    const lineup = Team.resolveLineup(state.roster, state.depth);
+    const starters = new Set();
+    for (const pos in lineup.groups) for (const p of lineup.groups[pos]) starters.add(p.id);
+    for (const p of state.roster) {
+      const reps = p.level === 'V' ? (starters.has(p.id) ? 1 : 0.5) : 0.85;
+      const mult = p.level === 'V' ? fx.dev[p.pos] : p.level === 'JV' ? fx.jv : fx.fr;
+      Players.practiceWeek(rng, p, state.program.focus, fac.practice, reps, mult);
+    }
+  }
+
+  function postWeek(state) {
     for (const p of state.roster) {
       if (p.injNew) p.injNew = false;
       else if (p.injury > 0) {
         p.injury--;
         if (p.injury === 0) {
           p.injuryNote = '';
-          addNews(state, Players.fullName(p) + ' (' + p.pos + ') has been cleared to return.', 'info');
+          if (p.level === 'V') addNews(state, Players.fullName(p) + ' (' + p.pos + ') has been cleared to return.', 'info');
         }
       }
-      Players.practiceWeek(rng, p, state.program.focus, fac.practice);
     }
-    // Injured starters are swapped out automatically; healthy ones return to their slots.
+    if (state.phase === 'regular') practice(state);
     state.depth = Team.autoDepth(state.roster, state.depth);
     computeRatings(state);
     const u = user(state);
 
     if (state.phase === 'regular') {
       if (state.week === 10) {
-        // League champions
         for (const lg of state.leagues) {
           const st = leagueStandings(state, lg.id);
           const top = st[0];
           for (const s of st) if (s.rec.lw === top.rec.lw && s.rec.ll === top.rec.ll) s.rec.leagueChamp = true;
         }
+        for (const s of state.schools) if (s.state === 'KY') s.rec.result = s.rec.leagueChamp ? 'District Champion' : 'Season complete';
         if (u.rec.leagueChamp) {
           state.coach.leagueTitles++;
           addNews(state, u.name + ' clinches a share of the ' + league(state, u.leagueId).name + ' title!', 'big');
         }
+        if (u.state === 'KY') addNews(state, u.name + ' finishes the regular season ' + u.rec.w + '-' + u.rec.l + '. Kentucky’s KHSAA playoff format is not in the game yet, so the season ends here.', 'big');
         state.phase = 'playoffs';
         state.week = 11;
         setupPlayoffs(state);
@@ -565,9 +692,8 @@
   /* ------------------------------------------------------------------ */
   /* Offseason                                                           */
   /* ------------------------------------------------------------------ */
-  const OFFSEASON_STEPS = ['Season Recap', 'Graduation', 'Player Development', 'Incoming Class', 'Program Budget'];
-
   function seasonSummary(s) {
+    if (s.state === 'KY') return s.rec.leagueChamp ? 'District Champion' : 'Season complete';
     if (s.rec.result === 'State Champion') return 'State Champion';
     if (s.rec.result) return s.rec.result;
     return s.rec.seed ? 'Playoffs' : 'Missed playoffs';
@@ -577,18 +703,16 @@
     state.phase = 'offseason';
     state.week = 17;
     const u = user(state);
-    // Season record for every school, prestige drift.
     for (const s of state.schools) {
       const result = seasonSummary(s);
       s.history.unshift({ year: state.year, w: s.rec.w, l: s.rec.l, lw: s.rec.lw, ll: s.rec.ll, result, league: !!s.rec.leagueChamp });
-      if (s.history.length > (s.isUser ? 40 : 12)) s.history.length = s.isUser ? 40 : 12;
+      if (s.history.length > (s.isUser ? 40 : 8)) s.history.length = s.isUser ? 40 : 8;
       const pct = U.pct(s.rec.w, s.rec.l);
-      let delta = (pct - 0.5) * 9 + s.rec.pw * 1.3 + (result === 'State Champion' ? 5 : 0) + (s.rec.leagueChamp ? 1 : 0);
+      const delta = (pct - 0.5) * 9 + s.rec.pw * 1.3 + (result === 'State Champion' ? 5 : 0) + (s.rec.leagueChamp ? 1 : 0);
       const anchor = s.isUser ? 50 : s.basePrestige;
       s.prestige = Math.round(U.clamp(s.prestige * 0.9 + anchor * 0.1 + delta, 3, 99));
     }
     state.coach.seasons++;
-    // Honors for user players
     const awards = [];
     const lineup = Team.resolveLineup(state.roster, state.depth);
     const starters = new Set();
@@ -599,24 +723,25 @@
     ranked.slice(0, slots).forEach((p, i) => {
       const o = Players.ovr(p);
       let honor = null;
-      if (o >= 84 && winning) honor = 'All-Ohio';
-      else if (o >= 76 && i < slots / 2) honor = 'All-League 1st Team';
-      else if (o >= 69) honor = 'All-League 2nd Team';
+      if (o >= 60 && winning) honor = 'All-State';
+      else if (o >= 52 && i < slots / 2) honor = 'All-League 1st Team';
+      else if (o >= 45) honor = 'All-League 2nd Team';
       if (honor) {
         p.honors.push(state.year + ' ' + honor);
         awards.push({ id: p.id, name: Players.fullName(p), pos: p.pos, year: Players.CLASS_NAME[p.year], honor });
       }
     });
     state.history.unshift({
-      year: state.year, w: u.rec.w, l: u.rec.l, lw: u.rec.lw, ll: u.rec.ll, pf: u.rec.pf, pa: u.rec.pa, division: u.division, region: u.region,
+      year: state.year, state: u.state, w: u.rec.w, l: u.rec.l, lw: u.rec.lw, ll: u.rec.ll, pf: u.rec.pf, pa: u.rec.pa, division: u.division, region: u.region,
       result: seasonSummary(u), seed: u.rec.seed, leagueChamp: !!u.rec.leagueChamp, prestige: u.prestige,
+      jv: Object.assign({}, state.lower.JV), fr: Object.assign({}, state.lower.FR),
       games: userSchedule(state).map((g) => {
         const home = g.home === state.userId;
         const opp = opponentOf(state, g, state.userId);
         return { week: g.week, opp: opp.name, home, neutral: !!g.neutral, us: home ? g.hs : g.as, them: home ? g.as : g.hs, ot: g.ot, round: g.playoff ? g.playoff.round : 0 };
       }),
     });
-    state.offseason = { step: 0, awards, graduates: [], development: [], incoming: [], budgetAdded: 0 };
+    state.offseason = { step: 0, awards, graduates: [], development: [], incoming: [], departures: [], promoted: 0, staffChanges: [], budgetAdded: 0, payroll: 0 };
     addNews(state, 'The ' + state.year + ' season is complete. ' + u.name + ' finished ' + u.rec.w + '-' + u.rec.l + ' (' + seasonSummary(u) + ').', 'big');
   }
 
@@ -626,42 +751,50 @@
     const rng = new RNG();
     const u = user(state);
     const fac = state.program.facilities;
+    const fx = Team.userEffects(state);
     if (O.step === 0) {
-      // Graduation
-      O.graduates = state.roster.filter((p) => p.year === 4).map((p) => ({ name: Players.fullName(p), pos: p.pos, ovr: Players.ovr(p), honors: p.honors.slice(-2) }));
+      // Graduation, with where each senior projects at the next level.
+      const seniors = state.roster.filter((p) => p.year === 4);
+      O.graduates = seniors.map((p) => {
+        const outlook = Players.collegeOutlook(p);
+        return { name: Players.fullName(p), pos: p.pos, ovr: Players.ovr(p), pot: p.pot, outlook: outlook.label, tier: outlook.tier, honors: p.honors.slice(-2) };
+      });
+      const prospects = O.graduates.filter((g) => g.tier >= 3).length;
+      state.coach.prospects += prospects;
+      if (prospects) addNews(state, prospects + ' graduating senior' + (prospects > 1 ? 's project' : ' projects') + ' as Division I (FBS/FCS) college prospects.', 'big');
       state.roster = state.roster.filter((p) => p.year < 4);
     } else if (O.step === 1) {
-      // Development
+      const physical = fx.physical + (fac.weight - 1) * 0.5;
       O.development = state.roster
         .map((p) => {
           const before = Players.ovr(p);
-          const delta = Players.developOffseason(rng, p, fac);
+          const mult = p.level === 'V' ? fx.dev[p.pos] : p.level === 'JV' ? fx.jv : fx.fr;
+          const delta = Players.developOffseason(rng, p, { mult, practice: fac.practice, physical: physical / 3 });
           p.year++;
           p.injury = 0;
           p.injuryNote = '';
           return { id: p.id, name: Players.fullName(p), pos: p.pos, year: Players.CLASS_NAME[p.year], before, after: before + delta, delta };
         })
         .sort((a, b) => b.delta - a.delta);
+      Players.fixLevels(state.roster);
     } else if (O.step === 2) {
-      // Incoming freshmen (+ transfers)
-      const talent = Team.userTalent(u, fac);
-      const taken = new Set(state.roster.map((p) => p.num));
-      const nFresh = Math.max(5, Math.round((Players.rosterTarget(u.enrollment) / 4) * rng.normal(1.05, 0.12) + (u.prestige - 50) / 25));
+      const talent = Team.programTalent(u, fac);
+      const target = Players.programTarget(u.enrollment);
+      const nFresh = Math.max(12, Math.round((target / 4) * rng.normal(1.04, 0.07) + (u.prestige - 50) / 12));
       const incoming = [];
-      for (const pos of Players.classPositions(rng, nFresh)) incoming.push(Object.assign(Players.generate(rng, pos, 1, talent, taken), { origin: 'Freshman' }));
+      for (const pos of Players.classPositions(rng, nFresh)) incoming.push(Object.assign(Players.generate(rng, pos, 1, talent, null), { origin: 'Freshman', level: 'FR' }));
       const transfers = u.type === 'private' ? Math.round(1 + u.prestige / 35 + rng.next()) : rng.chance(0.3) ? 1 : 0;
       for (let i = 0; i < transfers; i++) {
-        const pos = rng.weighted(Players.POS_MIX);
-        incoming.push(Object.assign(Players.generate(rng, pos, rng.int(2, 3), talent + (u.type === 'private' ? 4 : 2), taken), { origin: 'Transfer' }));
+        const t = Players.generate(rng, rng.weighted(Players.POS_MIX), rng.int(2, 3), talent + (u.type === 'private' ? 4 : 2), null);
+        incoming.push(Object.assign(t, { origin: 'Transfer', level: 'JV' }));
       }
-      // Make sure the cupboard is never bare at key spots.
-      for (const [pos, min] of [['QB', 2], ['K', 1], ['OL', 6], ['DL', 4]]) {
+      for (const [pos, min] of [['QB', 4], ['K', 2], ['OL', 14], ['DL', 10]]) {
         let have = state.roster.concat(incoming).filter((p) => p.pos === pos).length;
-        while (have++ < min) incoming.push(Object.assign(Players.generate(rng, pos, 1, talent, taken), { origin: 'Walk-on' }));
+        while (have++ < min) incoming.push(Object.assign(Players.generate(rng, pos, 1, talent, null), { origin: 'Walk-on', level: 'FR' }));
       }
       state.roster = state.roster.concat(incoming);
-      // Big rosters thin out: a few underclassmen buried on the depth chart move on.
-      const cap = Math.round(Players.rosterTarget(u.enrollment) * 1.3);
+      // Programs that outgrow their numbers lose a few players buried on the depth chart.
+      const cap = Math.round(target * 1.12);
       O.departures = [];
       if (state.roster.length > cap) {
         const fresh = new Set(incoming.map((p) => p.id));
@@ -673,9 +806,23 @@
         state.roster = state.roster.filter((p) => !gone.has(p.id));
         O.departures = leaving.map((p) => Players.fullName(p) + ' (' + p.pos + ')');
       }
-      O.incoming = incoming.map((p) => ({ id: p.id, name: Players.fullName(p), pos: p.pos, ovr: Players.ovr(p), stars: Players.potentialStars(p), origin: p.origin, year: Players.CLASS_NAME[p.year] }));
+      // Fill varsity back up after graduation with the best players from the lower teams.
+      const vTarget = Players.varsityTarget(target);
+      let varsity = state.roster.filter((p) => p.level === 'V').length;
+      const promote = state.roster.filter((p) => p.level !== 'V').sort((a, b) => Players.ovr(b) - Players.ovr(a));
+      O.promoted = 0;
+      while (varsity < vTarget && promote.length) {
+        promote.shift().level = 'V';
+        varsity++;
+        O.promoted++;
+      }
+      Players.assignNumbers(rng, state.roster);
+      O.incoming = incoming.filter((p) => state.roster.includes(p)).map((p) => ({ id: p.id, name: Players.fullName(p), pos: p.pos, ovr: Players.ovr(p), stars: Players.potentialStars(p), origin: p.origin, year: Players.CLASS_NAME[p.year], level: p.level }));
       for (const p of incoming) delete p.origin;
     } else if (O.step === 3) {
+      O.staffChanges = Coaches.offseason(state.staff, rng);
+      for (const c of O.staffChanges) addNews(state, Coaches.ROLE[c.role].title + ' ' + c.name + ' ' + c.why + '.', 'info');
+      state.staffRefresh = {};
       const add = budget(u);
       state.program.funds += add;
       O.budgetAdded = add;
@@ -693,26 +840,33 @@
     state.playoffs = null;
     state.offseason = null;
     state.program.revenue = 0;
-    // Keep only this season's games (and last season's user box scores live in history via player stats).
+    state.lower = { JV: { w: 0, l: 0 }, FR: { w: 0, l: 0 } };
     state.games = [];
     for (const s of state.schools) {
       s.rec = emptyRecord();
       s.cp = 0;
       if (!s.isUser) {
-        s.r = Team.aiRatings(s, new RNG('ai|' + s.id + '|' + state.year), s.r);
-        s.elo = s.elo * 0.55 + initialElo(s.r) * 0.45;
+        s.ct[state.year] = classTalent(s, state.year);
+        for (const y in s.ct) if (Number(y) < state.year - 3) delete s.ct[y];
       }
     }
+    refreshAIRatings(state);
+    for (const s of state.schools) if (!s.isUser) s.elo = s.elo * 0.55 + initialElo(s.r) * 0.45;
+    Players.fixLevels(state.roster);
     state.depth = Team.autoDepth(state.roster, state.depth);
     const u = user(state);
     u.elo = u.elo * 0.55 + initialElo(Team.userRatings(state)) * 0.45;
+    const pay = Coaches.payroll(state.staff);
+    state.program.funds -= pay;
     state.games = Schedule.generate(state.schools, state.leagues, state.year, state.userId);
     computeRatings(state);
-    addNews(state, 'The ' + state.year + ' season is here. Week 1 kicks off ' + Schedule.weekDateStr(state.year, 1, true) + '.', 'big');
+    addNews(state, 'The ' + state.year + ' season is here. Staff payroll of ' + U.money(pay) + ' has been paid. Week 1 kicks off ' + Schedule.weekDateStr(state.year, 1, true) + '.', 'big');
+    const vacant = Coaches.ROLES.filter((r) => !state.staff[r.id]);
+    if (vacant.length) addNews(state, 'Open staff positions: ' + vacant.map((r) => r.title).join(', ') + '. Hire replacements from the Coaching Staff window.', 'injury');
   }
 
   /* ------------------------------------------------------------------ */
-  /* Program                                                             */
+  /* Program management                                                  */
   /* ------------------------------------------------------------------ */
   function upgradeCost(state, key) {
     const lvl = state.program.facilities[key];
@@ -728,12 +882,56 @@
     return true;
   }
 
+  function setLevel(state, playerId, level) {
+    const p = state.roster.find((x) => x.id === playerId);
+    if (!p || !Players.levelAllowed(p, level) || p.level === level) return false;
+    p.level = level;
+    Players.assignNumbers(new RNG(), state.roster);
+    state.depth = Team.autoDepth(state.roster, state.depth);
+    return true;
+  }
+
+  function autoLevels(state) {
+    const target = Players.programTarget(user(state).enrollment);
+    Players.autoAssignLevels(state.roster, Players.varsityTarget(target));
+    Players.assignNumbers(new RNG(), state.roster);
+    state.depth = Team.autoDepth(state.roster, state.depth);
+  }
+
+  // Mid-season hires cost half a season's salary now; offseason hires are covered by next payroll.
+  function hireCost(state, coach) {
+    return state.phase === 'offseason' ? 0 : Math.round(coach.salary / 2);
+  }
+
+  function marketFor(state, role) {
+    const taken = new Set(Object.values(state.staff).filter(Boolean).map((c) => c.id));
+    return Coaches.candidates(role, state.year, state.staffRefresh[role] || 0).filter((c) => !taken.has(c.id));
+  }
+
+  function hire(state, role, coach) {
+    const cost = hireCost(state, coach);
+    if (state.program.funds < cost) return false;
+    state.program.funds -= cost;
+    state.staff[role] = Object.assign({}, coach, { years: 0 });
+    state.staffRefresh[role] = (state.staffRefresh[role] || 0) + 1;
+    addNews(state, user(state).name + ' hires ' + coach.first + ' ' + coach.last + ' as ' + Coaches.ROLE[role].title + '.', 'info');
+    return true;
+  }
+
+  function fire(state, role) {
+    const c = state.staff[role];
+    if (!c) return false;
+    state.staff[role] = null;
+    addNews(state, Coaches.ROLE[role].title + ' ' + c.first + ' ' + c.last + ' has been let go.', 'info');
+    return true;
+  }
+
   // What the user's staff believes about an opponent (film room sharpens the report).
   function scout(state, s) {
     if (s.isUser) return Team.userRatings(state);
     const film = state.program.facilities.film;
     const rng = new RNG('scout|' + s.id + '|' + state.year);
-    const sd = (5 - film) * 1.3;
+    const sd = (5 - film) * 1.1;
     const out = {};
     for (const k in s.r) out[k] = Math.round(s.r[k] + rng.normal(0, sd));
     return out;
@@ -746,9 +944,10 @@
   }
 
   FNG.Season = {
-    START_YEAR, ROUND_NAMES, FACILITIES, FOCUS, OFFSEASON_STEPS, SIZE_ENROLL, STATUS_PRESTIGE,
+    SAVE_VERSION, START_YEAR, ROUND_NAMES, FACILITIES, FOCUS, OFFSEASON_STEPS, SIZE_ENROLL, STATUS_PRESTIGE,
     school, user, league, addNews, preview, newGame, weekGames, userGame, userSchedule, opponentOf, gameWeather,
-    engineGame, finishGame, simGame, advanceWeek, computeRatings, regionStandings, poll, pollRank, leagueStandings,
-    userAlive, offseasonNext, upgradeCost, upgrade, scout, phaseLabel, teamRatings, budget, isUserGame, seasonSummary,
+    simGame, advanceWeek, computeRatings, regionStandings, poll, pollRank, leagueStandings, aiRoster,
+    userAlive, offseasonNext, upgradeCost, upgrade, scout, phaseLabel, budget, isUserGame, seasonSummary,
+    setLevel, autoLevels, hire, fire, hireCost, marketFor,
   };
 })();

@@ -42,7 +42,7 @@
           { key: 'pf', label: 'PF', render: (s) => s.rec.pf, cls: 'num r' },
           { key: 'pa', label: 'PA', render: (s) => s.rec.pa, cls: 'num r' },
           { key: 'strk', label: 'Strk', render: (s) => s.rec.streak || '—', cls: 'num' },
-          { key: 'div', label: 'Div', render: (s) => U.roman(s.division) },
+          { key: 'div', label: 'Class', render: (s) => World.divShort(s) },
           { key: 'city', label: 'City', render: (s) => s.city, cls: 'muted' },
         ], rows, { rowClass: (s) => (s.isUser ? 'me' : ''), onRow: (s) => Win.school(s.id) }));
       },
@@ -55,13 +55,15 @@
       icon: 'rankings',
       width: 860,
       height: 640,
-      state: { tab: 'computer', region: null, div: 0 },
+      state: { tab: null, region: null, div: 0, st: null },
       render(body, w) {
         const st = App.state;
         const u = Season.user(st);
         const S = w.state;
-        if (!S.region) S.region = u.region;
-        body.appendChild(tabs([{ value: 'computer', label: 'Computer Ratings' }, { value: 'poll', label: 'State Poll' }], S.tab, (v) => { S.tab = v; WM.refresh(w.id); }));
+        if (!S.region) S.region = u.region || 1;
+        if (!S.tab) S.tab = u.state === 'OH' ? 'computer' : 'poll';
+        if (!S.st) S.st = u.state;
+        body.appendChild(tabs([{ value: 'computer', label: 'Ohio Computer Ratings' }, { value: 'poll', label: 'State Polls' }], S.tab, (v) => { S.tab = v; WM.refresh(w.id); }));
         if (S.tab === 'computer') {
           const regionOpts = [];
           for (let r = 1; r <= 28; r++) regionOpts.push({ value: r, label: 'Division ' + U.roman(Math.ceil(r / 4)) + ' · Region ' + r + ' (' + World.regionName(r) + ')' + (r === u.region ? ' ★' : '') });
@@ -78,19 +80,22 @@
           ], rows, { rowClass: (s) => (s.isUser ? 'me' : ''), cutAfter: 16, onRow: (s) => Win.school(s.id) }));
           body.appendChild(h('p', { class: 'help' }, 'Ohio-style computer ratings: Level 1 points for every win (6.0 vs Division I down to 3.0 vs Division VII) plus one-tenth of the Level 1 points earned by the teams you beat, divided by games scheduled.'));
         } else {
-          body.appendChild(h('div', { class: 'toolbar' }, seg([{ value: 0, label: 'All' }].concat([1, 2, 3, 4, 5, 6, 7].map((d) => ({ value: d, label: U.roman(d) }))), S.div, (v) => { S.div = v; WM.refresh(w.id); })));
-          const list = Season.poll(st, S.div || null);
+          const divs = S.st === 'KY' ? [1, 2, 3, 4, 5, 6].map((d) => ({ value: d, label: 7 - d + 'A' })) : [1, 2, 3, 4, 5, 6, 7].map((d) => ({ value: d, label: U.roman(d) }));
+          body.appendChild(h('div', { class: 'toolbar' },
+            seg([{ value: 'OH', label: 'Ohio' }, { value: 'KY', label: 'Kentucky' }], S.st, (v) => { S.st = v; S.div = 0; WM.refresh(w.id); }),
+            seg([{ value: 0, label: 'All' }].concat(divs), S.div, (v) => { S.div = v; WM.refresh(w.id); })));
+          const list = Season.poll(st, S.st, S.div || null);
           body.appendChild(table([
             { key: 'rk', label: 'Rk', render: (s, i) => i + 1, cls: 'num bold' },
             { key: 'team', label: 'Team', render: (s) => teamCell(st, s) },
             { key: 'rec', label: 'Record', render: (s) => s.rec.w + '-' + s.rec.l, cls: 'num' },
-            { key: 'div', label: 'Div', render: (s) => U.roman(s.division) },
-            { key: 'reg', label: 'Region', render: (s) => s.region, cls: 'num' },
+            { key: 'div', label: 'Class', render: (s) => World.divShort(s) },
+            { key: 'reg', label: S.st === 'KY' ? 'District' : 'Region', render: (s) => (s.region ? s.region : Season.league(st, s.leagueId).name.replace(/^Class \S+ District /, '')), cls: 'num' },
             { key: 'pw', label: 'Power', render: (s) => Math.round(s.elo), cls: 'num r' },
             { key: 'city', label: 'City', render: (s) => s.city, cls: 'muted' },
           ], list, { rowClass: (s) => (s.isUser ? 'me' : ''), onRow: (s) => Win.school(s.id) }));
-          const rank = Season.pollRank(st, u, S.div || null);
-          body.appendChild(h('p', { class: 'help' }, u.name + (rank ? ' is ranked #' + rank + '.' : ' is not ranked here.') + ' Poll is based on a power rating that rewards wins, margin and strength of opponent.'));
+          const rank = S.st === u.state ? Season.pollRank(st, u, S.div || null) : 0;
+          body.appendChild(h('p', { class: 'help' }, (S.st === u.state ? u.name + (rank ? ' is ranked #' + rank + '. ' : ' is not ranked here. ') : '') + 'Polls are based on a power rating that rewards wins, margin and strength of opponent, including games across the state line.'));
         }
       },
     });
@@ -129,8 +134,9 @@
         const st = App.state;
         const u = Season.user(st);
         const S = w.state;
-        if (!S.div) S.div = u.division;
-        if (!S.view) S.view = String(u.region);
+        if (!S.div) S.div = u.state === 'OH' ? u.division : 1;
+        if (!S.view) S.view = String(u.state === 'OH' ? u.region : 1);
+        if (u.state !== 'OH') body.appendChild(h('div', { class: 'card tight mb' }, h('span', { class: 'bold' }, 'Ohio (OHSAA) brackets. '), h('span', { class: 'small muted' }, 'Kentucky\u2019s KHSAA playoff format is not in the game yet; Kentucky seasons end after Week 10.')));
         const divSeg = seg([1, 2, 3, 4, 5, 6, 7].map((d) => ({ value: d, label: 'Div ' + U.roman(d) })), S.div, (v) => {
           S.div = v;
           S.view = String((v - 1) * 4 + 1);

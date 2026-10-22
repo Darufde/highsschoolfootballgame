@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const FNG = window.FNG;
-  const { U, Season, Schedule } = FNG;
+  const { U, Season, Schedule, World } = FNG;
   const { h, badge, table, select } = FNG.UI;
   const WM = FNG.WM;
   const App = FNG.App;
@@ -13,11 +13,17 @@
     return h('span', { class: 'tag ' + (won ? 'good' : 'bad') }, (won ? 'W ' : 'L ') + us + '-' + them + (ot ? (ot > 1 ? ' ' + ot + 'OT' : ' OT') : ''));
   }
 
+  function lowerTag(res) {
+    if (!res) return h('span', { class: 'dim' }, '—');
+    if (res.cancelled) return h('span', { class: 'tag', title: 'Not enough healthy players' }, 'No game');
+    return resultTag(res.us, res.them, 0);
+  }
+
   Win.schedule = function () {
     WM.open('schedule', {
       title: 'Schedule',
       icon: 'schedule',
-      width: 860,
+      width: 1000,
       height: 600,
       state: { season: 'current' },
       render(body, w) {
@@ -27,7 +33,7 @@
         body.appendChild(h('div', { class: 'toolbar' },
           select(seasons, w.state.season, (v) => { w.state.season = v; WM.refresh(w.id); }),
           h('div', { class: 'grow' }),
-          w.state.season === 'current' ? h('span', { class: 'small muted' }, 'Overall ' + u.rec.w + '-' + u.rec.l + ' · League ' + u.rec.lw + '-' + u.rec.ll + ' · PF ' + u.rec.pf + ' · PA ' + u.rec.pa) : null));
+          w.state.season === 'current' ? h('span', { class: 'small muted' }, 'Varsity ' + u.rec.w + '-' + u.rec.l + ' · ' + (u.state === 'KY' ? 'District ' : 'League ') + u.rec.lw + '-' + u.rec.ll + ' · PF ' + u.rec.pf + ' · PA ' + u.rec.pa + ' · JV ' + st.lower.JV.w + '-' + st.lower.JV.l + ' · Freshman ' + st.lower.FR.w + '-' + st.lower.FR.l) : null));
 
         if (w.state.season !== 'current') {
           const hist = st.history.find((x) => String(x.year) === w.state.season);
@@ -37,7 +43,7 @@
             { key: 'res', label: 'Result', render: (g) => resultTag(g.us, g.them, g.ot) },
             { key: 'type', label: '', render: (g) => (g.round ? Season.ROUND_NAMES[g.round] : '') },
           ], hist ? hist.games : [], { empty: 'No games recorded.' }));
-          if (hist) body.appendChild(h('p', { class: 'muted small' }, hist.w + '-' + hist.l + ' · ' + hist.result));
+          if (hist) body.appendChild(h('p', { class: 'muted small' }, 'Varsity ' + hist.w + '-' + hist.l + ' · ' + hist.result + (hist.jv ? ' · JV ' + hist.jv.w + '-' + hist.jv.l + ' · Freshman ' + hist.fr.w + '-' + hist.fr.l : '')));
           return;
         }
 
@@ -64,8 +70,8 @@
             },
           },
           { key: 'orec', label: 'Opp Rec', render: (r) => (r.g ? (() => { const o = Season.opponentOf(st, r.g, st.userId); return o.rec.w + '-' + o.rec.l; })() : ''), cls: 'num' },
-          { key: 'div', label: 'Div', render: (r) => (r.g ? U.roman(Season.opponentOf(st, r.g, st.userId).division) : '') },
-          { key: 'type', label: 'Type', render: (r) => (!r.g ? '' : r.g.playoff ? h('span', { class: 'tag gold' }, Season.ROUND_NAMES[r.g.playoff.round]) : r.g.league ? h('span', { class: 'tag team' }, 'League') : h('span', { class: 'tag' }, 'Non-league')) },
+          { key: 'div', label: 'Class', render: (r) => { if (!r.g) return ''; const o = Season.opponentOf(st, r.g, st.userId); return World.divShort(o) + (o.state !== u.state ? ' ' + o.state : ''); } },
+          { key: 'type', label: 'Type', render: (r) => (!r.g ? '' : r.g.playoff ? h('span', { class: 'tag gold' }, Season.ROUND_NAMES[r.g.playoff.round]) : r.g.league ? h('span', { class: 'tag team' }, u.state === 'KY' ? 'District' : 'League') : h('span', { class: 'tag' }, 'Non-league')) },
           {
             key: 'res', label: 'Result', render: (r) => {
               if (!r.g) return '';
@@ -74,6 +80,8 @@
               return resultTag(home ? r.g.hs : r.g.as, home ? r.g.as : r.g.hs, r.g.ot);
             },
           },
+          { key: 'jv', label: 'JV', render: (r) => lowerTag(r.g && r.g.jv) },
+          { key: 'fr', label: 'Fresh', render: (r) => lowerTag(r.g && r.g.fr) },
           { key: 'box', label: '', render: (r) => (r.g && r.g.box ? h('button', { type: 'button', class: 'btn sm ghost', onclick: () => Win.box(r.g.id) }, 'Box Score') : null) },
         ], weeks, { rowClass: (r) => (r.week === st.week && st.phase !== 'offseason' ? 'me' : '') }));
       },

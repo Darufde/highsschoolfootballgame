@@ -56,6 +56,7 @@
     search: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
     calendarNext: '<path d="M9 6l6 6-6 6"/>',
     news: '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/>',
+    staff: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2.8h6V4M8.5 10h7M8.5 14h7M8.5 18h4"/>',
     star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
   };
 
@@ -88,12 +89,13 @@
     return h('span', { class: 'sbadge' + (size ? ' ' + size : ''), style, title: s.name }, txt);
   }
 
+  // Career scale: 99 is a Hall of Fame pro, so high school ratings live mostly in the 15-60 range.
   function ratingClass(v) {
-    if (v < 45) return 'r1';
-    if (v < 55) return 'r2';
-    if (v < 63) return 'r3';
-    if (v < 71) return 'r4';
-    if (v < 80) return 'r5';
+    if (v < 25) return 'r1';
+    if (v < 33) return 'r2';
+    if (v < 41) return 'r3';
+    if (v < 50) return 'r4';
+    if (v < 62) return 'r5';
     return 'r6';
   }
   function ovrChip(v, title) {

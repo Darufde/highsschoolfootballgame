@@ -571,5 +571,5 @@ Carey|Wyandot|3600|40.95|-83.38
     ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'],
     ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'],
     ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
-  ].map(([abbr, name]) => ({ abbr, name, playable: abbr === 'OH' }));
+  ].map(([abbr, name]) => ({ abbr, name, playable: abbr === 'OH' || abbr === 'KY' }));
 })();

@@ -25,7 +25,10 @@
         const box = h('div', { class: 'title-screen' },
           h('div', { class: 'ball-mark' }),
           h('div', { class: 'logo' }, 'FRIDAY NIGHT', h('br'), 'GRIDIRON'),
-          h('div', { class: 'sub' }, 'Ohio High School Football'));
+          h('div', { class: 'sub' }, 'Ohio & Kentucky High School Football'));
+        if (!sum && App.hasOldSave()) {
+          box.appendChild(h('div', { class: 'card tight mb', style: { textAlign: 'left' } }, h('div', { class: 'small' }, 'Your saved program is from an earlier version of the game and can\u2019t be loaded. Start a new program to play this version.')));
+        }
         if (sum) {
           const s = { name: sum.name, isUser: true };
           box.appendChild(h('div', { class: 'card tight', style: { textAlign: 'left', marginBottom: '14px' } },
@@ -51,7 +54,7 @@
   };
 
   Win.setup = function () {
-    const D = FNG.DATA.ohio;
+    const cityList = () => World.stateData(form.state).cities;
     const form = {
       coach: '',
       state: 'OH',
@@ -95,22 +98,29 @@
         left.appendChild(field('Head Coach', coachInput, null, 'coach'));
 
         // State + City
-        const stateSel = select(FNG.DATA.states.map((s) => ({ value: s.abbr, label: s.name + (s.playable ? '' : ' — coming soon'), disabled: !s.playable })), form.state, (v) => (form.state = v));
+        const stateSel = select(FNG.DATA.states.map((s) => ({ value: s.abbr, label: s.name + (s.playable ? '' : ' — coming soon'), disabled: !s.playable })), form.state, (v) => {
+          form.state = v;
+          form.city = '';
+          cityInput.value = '';
+          cityInput.placeholder = 'Search ' + World.stateName(v) + ' cities and towns…';
+          cityNote.textContent = cityList().length + ' ' + World.stateName(v) + ' communities available.';
+          refreshPreview();
+        });
         stateSel.style.width = '100%';
-        const cityInput = h('input', { class: 'input', style: { width: '100%' }, placeholder: 'Search Ohio cities and villages…', autocomplete: 'off', 'aria-autocomplete': 'list' });
+        const cityInput = h('input', { class: 'input', style: { width: '100%' }, placeholder: 'Search Ohio cities and towns…', autocomplete: 'off', 'aria-autocomplete': 'list' });
         const list = h('div', { class: 'combo-list', hidden: true, role: 'listbox' });
-        const cityNote = h('div', { class: 'help' }, D.cities.length + ' Ohio communities available.');
+        const cityNote = h('div', { class: 'help' }, cityList().length + ' Ohio communities available.');
         let hl = -1;
         let matches = [];
         const showList = () => {
           const q = cityInput.value.trim().toLowerCase();
-          matches = D.cities
+          matches = cityList()
             .filter((c) => !q || c.name.toLowerCase().includes(q) || c.county.toLowerCase().startsWith(q))
             .sort((a, b) => (a.name.toLowerCase().startsWith(q) ? 0 : 1) - (b.name.toLowerCase().startsWith(q) ? 0 : 1) || b.pop - a.pop)
             .slice(0, 60);
           list.replaceChildren(...matches.map((c, i) => h('button', { type: 'button', class: i === hl ? 'hl' : '', onmousedown: (e) => { e.preventDefault(); chooseCity(c); } },
             h('span', null, c.name), h('span', { class: 'muted' }, c.county + ' County'))));
-          if (!matches.length) list.replaceChildren(h('div', { class: 'empty small' }, 'No Ohio community matches.'));
+          if (!matches.length) list.replaceChildren(h('div', { class: 'empty small' }, 'No ' + World.stateName(form.state) + ' community matches.'));
           list.hidden = false;
         };
         const chooseCity = (c) => {
@@ -142,7 +152,7 @@
           }
         });
         left.appendChild(h('div', { class: 'grid c2' },
-          field('State', stateSel, 'More states are on the way.', 'state'),
+          field('State', stateSel, 'Ohio and Kentucky are playable. More states are on the way.', 'state'),
           field('City', h('div', { class: 'combo' }, cityInput, list), null, 'city')));
         left.lastChild.lastChild.appendChild(cityNote);
 
@@ -155,7 +165,7 @@
           }
           for (let i = 0; i < 30; i++) {
             form.suggest++;
-            const n = World.suggestName(form.city, form.type, form.suggest);
+            const n = World.suggestName(form.state, form.city, form.type, form.suggest);
             if (n && !existing.has(n.toLowerCase())) {
               form.name = n;
               nameInput.value = n;
@@ -176,8 +186,8 @@
             refreshPreview();
           }, 'full'));
           typeHelp.textContent = form.type === 'public'
-            ? 'Players come from your district. Smaller budget and rare transfers, but your division is set by true enrollment.'
-            : 'Draws students from a wide area: yearly transfers and a bigger budget. Competitive balance counts your enrollment ×1.3, which can push you up a division.';
+            ? 'Players come from your district. Smaller budget and rare transfers, but your classification is set by true enrollment.'
+            : 'Draws students from a wide area: yearly transfers and a bigger budget.' + (form.state === 'OH' ? ' Ohio\u2019s competitive balance counts your enrollment ×1.3, which can push you up a division.' : '');
         };
         drawType();
         left.appendChild(h('div', { class: 'field' }, h('label', { class: 'label' }, 'School Type'), typeBox, typeHelp));
@@ -195,7 +205,7 @@
           refreshPreview();
         }, 'full'));
         drawStatus();
-        left.appendChild(field('Enrollment', sizeSel, 'Enrollment decides your OHSAA division.', 'size'));
+        left.appendChild(field('Enrollment', sizeSel, 'Sets your division (Ohio) or class (Kentucky). Your program will have roughly 100-150 players.', 'size'));
         left.appendChild(field('Program Tradition', statusBox, 'Sets starting talent, prestige and expectations.', 'status'));
 
         // Colors
@@ -234,18 +244,21 @@
           card.appendChild(h('div', { class: 'row nowrap mb' }, badge(fake, { colors: form.colors }, 'lg'),
             h('div', { class: 'grow' },
               h('div', { style: { fontSize: '20px', fontWeight: 800, lineHeight: 1.15 } }, fake.name),
-              h('div', { class: 'muted small' }, (form.city || 'City') + ', Ohio · ' + (form.type === 'public' ? 'Public' : 'Private')),
+              h('div', { class: 'muted small' }, (form.city || 'City') + ', ' + World.stateName(form.state) + ' · ' + (form.type === 'public' ? 'Public' : 'Private')),
               form.coach.trim() ? h('div', { class: 'small' }, 'Head Coach ' + form.coach.trim()) : null)));
           if (form.city) {
             const pv = Season.preview(form);
             const s = pv.school;
+            const oh = s.state === 'OH';
             card.appendChild(h('dl', { class: 'kv' },
               h('dt', null, 'County'), h('dd', null, s.county),
-              h('dt', null, 'Enrollment'), h('dd', null, U.num(s.enrollment) + ' students' + (s.type === 'private' ? ' (counts as ' + U.num(World.adjustedEnrollment(s)) + ')' : '')),
-              h('dt', null, 'Division'), h('dd', null, 'Division ' + U.roman(s.division)),
-              h('dt', null, 'Region'), h('dd', null, 'Region ' + s.region + ' · ' + World.regionName(s.region) + ' (' + pv.regionSize + ' schools)'),
-              h('dt', null, 'League'), h('dd', null, pv.league)));
-            card.appendChild(h('h3', { class: 'sect mt' }, 'League Opponents'));
+              h('dt', null, 'Enrollment'), h('dd', null, U.num(s.enrollment) + ' students' + (oh && s.type === 'private' ? ' (counts as ' + U.num(World.adjustedEnrollment(s)) + ')' : '')),
+              h('dt', null, 'Program'), h('dd', null, '~' + FNG.Players.programTarget(s.enrollment) + ' players (varsity, JV, freshman)'),
+              h('dt', null, oh ? 'Division' : 'Class'), h('dd', null, World.divLabel(s) + (oh ? '' : ' (' + pv.groupSize + ' schools)')),
+              oh ? h('dt', null, 'Region') : null, oh ? h('dd', null, 'Region ' + s.region + ' · ' + World.regionName(s.region) + ' (' + pv.groupSize + ' schools)') : null,
+              h('dt', null, oh ? 'League' : 'District'), h('dd', null, pv.league),
+              h('dt', null, 'Playoffs'), h('dd', null, oh ? 'OHSAA format: top 16 per region' : 'KHSAA format not in the game yet')));
+            card.appendChild(h('h3', { class: 'sect mt' }, oh ? 'League Opponents' : 'District Opponents'));
             card.appendChild(h('div', { class: 'small', style: { lineHeight: 1.7 } }, pv.leagueMates.map((x) => x.name + ' (' + x.city + ')').join(' · ')));
             if (pv.sameCity.length) {
               card.appendChild(h('h3', { class: 'sect mt' }, 'Also in ' + form.city));
@@ -254,12 +267,13 @@
             card.appendChild(h('h3', { class: 'sect mt' }, 'Nearby'));
             card.appendChild(h('div', { class: 'small', style: { lineHeight: 1.7 } }, pv.nearby.map((x) => x.name + ' (' + x.city + ')').join(' · ')));
           } else {
-            card.appendChild(h('p', { class: 'muted small' }, 'Choose a city to see your division, region, league and rivals. Every Ohio school is generated the same way each time you play.'));
+            card.appendChild(h('p', { class: 'muted small' }, 'Choose a city to see your classification, league and rivals. Every school is generated the same way each time you play.'));
           }
           right.appendChild(card);
           const start = h('button', { type: 'button', class: 'btn primary lg block mt', onclick: () => begin() }, icon('play', 16), 'Start Program');
           right.appendChild(start);
-          right.appendChild(h('div', { class: 'help center' }, U.num(World.baseWorld().schools.length) + ' Ohio schools · 7 divisions · 28 regions'));
+          const all = World.baseWorld().schools;
+          right.appendChild(h('div', { class: 'help center' }, U.num(all.filter((x) => x.state === 'OH').length) + ' Ohio schools · ' + U.num(all.filter((x) => x.state === 'KY').length) + ' Kentucky schools'));
           start.disabled = Object.keys(errs).length > 0;
         };
 
@@ -278,12 +292,16 @@
             return;
           }
           if (App.hasSave() && !(await WM.confirm('Replace Save', 'Starting a new program replaces your current saved game. Continue?', 'Start New', true))) return;
-          const st = Season.newGame({ coach: form.coach, city: form.city, name: form.name, type: form.type, size: form.size, status: form.status, colors: form.colors.slice() });
-          WM.close('setup', true);
-          WM.close('title', true);
-          App.start(st);
-          App.save(true);
-          toast('Welcome to ' + Season.user(st).name + ', Coach ' + st.coach.name + '!', 'good', 5000);
+          FNG.UI.busy(true, 'Building ' + World.stateName(form.state) + ' and its rivals\u2026', 50);
+          setTimeout(() => {
+            const st = Season.newGame({ coach: form.coach, state: form.state, city: form.city, name: form.name, type: form.type, size: form.size, status: form.status, colors: form.colors.slice() });
+            FNG.UI.busy(false);
+            WM.close('setup', true);
+            WM.close('title', true);
+            App.start(st);
+            App.save(true);
+            toast('Welcome to ' + Season.user(st).name + ', Coach ' + st.coach.name + '!', 'good', 5000);
+          }, 30);
         };
 
         drawPreview();
