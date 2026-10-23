@@ -1,0 +1,361 @@
+/*
+ * College recruiting: the power conference programs (and Notre Dame) evaluate every prospect
+ * in the game each week and extend scholarship offers.
+ *
+ * A college values a player from his recruit rating (ability, ceiling, measurables, production
+ * and competition), projected forward for underclassmen, plus its own read on potential, season
+ * statistics, recent games, recruit ranking and schedule strength. Prestige sets the level a
+ * college recruits at: elite programs chase ranked, proven players and can recruit nationally;
+ * lower-prestige programs lean on potential, production and players close to home. A player's
+ * interest in a college also depends on prestige and distance, and colleges avoid players who
+ * are unlikely to be interested. Each college has a limited number of offers per position in
+ * each class. Offers stay on the table unless the player's stock falls well below the bar.
+ */
+(function () {
+  'use strict';
+  const FNG = window.FNG;
+  const { U } = FNG;
+  const P = FNG.Players;
+  const R = FNG.Recruits;
+
+  const LIST = FNG.DATA.colleges;
+  const BY_ID = {};
+  const HASH = {};
+  LIST.forEach((c, i) => {
+    c.i = i;
+    BY_ID[c.id] = c;
+    HASH[c.id] = FNG.hashString('college|' + c.id);
+  });
+  const CONF_NAME = {};
+  for (const c of FNG.DATA.conferences) CONF_NAME[c.id] = c.name;
+
+  const NEIGHBORS = {
+    OH: ['MI', 'IN', 'KY', 'WV', 'PA'],
+    KY: ['OH', 'IN', 'IL', 'MO', 'TN', 'VA', 'WV'],
+    TN: ['KY', 'VA', 'NC', 'GA', 'AL', 'MS', 'AR', 'MO'],
+  };
+  // Talent depth of each state's competition, on top of division size.
+  const STATE_DEPTH = { OH: 0.4, TN: 0, KY: -0.4 };
+  // Offers per position a college extends in one class, before scaling by how much it recruits this region.
+  const SLOTS = { QB: 2, RB: 3, WR: 4, TE: 2, OL: 5, DL: 5, LB: 3, CB: 3, S: 3, K: 1, P: 1 };
+  const POOL_MIN = 58; // projected rating below which no power program evaluates a player
+  const CLASS_PEN = [0, 0.5, 2.5, 5]; // seniors, juniors, sophomores, freshmen: offers to younger players are rarer
+  const WITHDRAW_AT = -5;
+  const MUST_HAVE = 8; // a player this far above the bar gets an offer even if the position is full...
+  const OVERFLOW = 2; // ...up to this many extra offers at the position
+  const NO_CHANCE = 22;
+  const SIGNED_YEARS = 6;
+  const WIRE = 80;
+
+  function get(id) {
+    return BY_ID[id];
+  }
+
+  function init() {
+    return { offers: {}, meta: {}, signed: {}, wire: [], off: {} };
+  }
+
+  // The rating a college typically recruits at.
+  function band(c) {
+    return 56.5 + c.prestige * 0.19;
+  }
+  // Distance (km) a college recruits without any penalty: elite programs recruit nationally.
+  function reach(c) {
+    return 250 + c.prestige * 9;
+  }
+
+  // Campus-to-school distances never change, so each school's row is computed once.
+  const DIST = new Map();
+  function distRow(s) {
+    let row = DIST.get(s.id);
+    if (!row) {
+      row = new Float32Array(LIST.length);
+      for (const c of LIST) row[c.i] = U.distKm(c, s);
+      DIST.set(s.id, row);
+    }
+    return row;
+  }
+  function dist(c, s) {
+    return distRow(s)[c.i];
+  }
+  // Home (2), neighboring (1) or distant (0) state, per college and player state.
+  const REL = {};
+  function relCode(c, st) {
+    const row = REL[st] || (REL[st] = LIST.map((x) => (x.state === st ? 2 : NEIGHBORS[st] && NEIGHBORS[st].includes(x.state) ? 1 : 0)));
+    return row[c.i];
+  }
+
+  function relation(c, st) {
+    if (c.state === st) return 'home';
+    return NEIGHBORS[st] && NEIGHBORS[st].includes(c.state) ? 'near' : 'far';
+  }
+
+  // Geography from the college's side: home-state and nearby players are easier to land,
+  // and lower-prestige programs depend on them more.
+  function geo(c, s, d) {
+    const rel = relCode(c, s.state);
+    const home = rel === 2 ? 2 + (100 - c.prestige) * 0.04 : rel;
+    return home - Math.max(0, (d ? d[c.i] : dist(c, s)) - reach(c)) / 140;
+  }
+
+  /*
+   * Everything a college looks at for one player.
+   * cls: 0 senior .. 3 freshman. proj: rating projected to senior year. rank: national class rank (0 = unranked).
+   */
+  function metrics(p, s, sc, cy, year, rank, perf, off, sosMean) {
+    const cls = U.clamp(cy - year - 1, 0, 3);
+    const potEdge = U.clamp(p.pot - P.ovr(p) - ((4 - p.year) * 4.5 + 9), -10, 15);
+    const sos = s.sos != null && s.rec && s.rec.gp ? U.clamp((s.sos - (sosMean || 0)) / 5, -1, 1) : 0;
+    return {
+      p, s, sc, cy, cls, rank, h: FNG.hashString(p.id), d: distRow(s),
+      proj: sc + ((off && off[cy]) || 0),
+      stars: R.stars(rank),
+      potEdge,
+      statsEdge: R.production(p, perf, s) * 0.5,
+      recentEdge: R.recent(p, perf),
+      compEdge: sos + (STATE_DEPTH[s.state] || 0),
+    };
+  }
+
+  const HYPE = [0.2, 0, 0.3, 0.6, 1.5, 3]; // by stars; unranked players get nothing
+  // value = proj + (1-q)*0.3*pot + (0.3 + 0.7*(1-q))*stats + 0.6*recent + q*hype + competition, with q = prestige/100,
+  // kept as v0 + q*v1 so the weekly pass over every college and prospect stays cheap.
+  function prepare(m) {
+    m.v0 = m.proj + 0.3 * m.potEdge + m.statsEdge + 0.6 * m.recentEdge + m.compEdge;
+    m.v1 = -0.3 * m.potEdge - 0.7 * m.statsEdge + (m.rank ? HYPE[m.stars] : 0);
+    // Best case for any college: top valuation, home-state bonus, full interest and favorable noise.
+    m.ub = m.v0 + Math.max(0.5 * m.v1, m.v1) + 4 + 3 + NOISE_MAX - CLASS_PEN[m.cls];
+    return m;
+  }
+  function value(c, m) {
+    if (m.v0 == null) prepare(m);
+    return m.v0 + (c.prestige / 100) * m.v1;
+  }
+
+  // Stable per college and player (how differently staffs grade the same kid). Cheap: runs for
+  // every college and prospect every week. Triangular (sum of two uniforms) with the given standard
+  // deviation, so it never exceeds 2.45 sd.
+  function noise(c, m, sd, salt) {
+    let x = (HASH[c.id] ^ Math.imul(m.h, 2654435761) ^ Math.imul(salt || 0, 374761393)) >>> 0;
+    x = Math.imul(x ^ (x >>> 15), 2246822507);
+    x = Math.imul(x ^ (x >>> 13), 3266489909);
+    x = (x ^ (x >>> 16)) >>> 0;
+    return ((x & 0xffff) / 65536 + (x >>> 16) / 65536 - 1) * 2.449 * sd;
+  }
+  const NOISE_MAX = 2.449 * 1.3;
+
+  // The prestige level a player expects from his suitors.
+  function preferred(m) {
+    return U.clamp(50 + (m.proj - 64) * 3.2, 20, 92);
+  }
+
+  // How interested a player is in a college (1-99): prestige against his own level (falling short of it
+  // hurts more than exceeding it helps), home state and distance.
+  function interest(c, m) {
+    const rel = relCode(c, m.s.state);
+    const gap = c.prestige - preferred(m);
+    let v = 62 + (gap > 0 ? gap * 0.6 : gap * 1.1) + (rel === 2 ? 12 : rel === 1 ? 5 : 0) - Math.min(22, m.d[c.i] / 90);
+    v += noise(c, m, 6, 7);
+    return Math.round(U.clamp(v, 1, 99));
+  }
+
+  function interestLabel(v) {
+    return v >= 80 ? 'Very high' : v >= 65 ? 'High' : v >= 45 ? 'Medium' : v >= 25 ? 'Low' : 'Very low';
+  }
+
+  // How far above (positive) or below the college's bar a player is, before position needs.
+  function evaluate(c, m, progress) {
+    const time = m.cls ? (1 - U.clamp(progress, 0, 1)) * 1.5 : 0;
+    return finish(c, m, value(c, m) - band(c) + geo(c, m.s, m.d) - CLASS_PEN[m.cls] - time);
+  }
+  // The player's interest and the staff's own grade, added to everything else.
+  function finish(c, m, base) {
+    return base + noise(c, m, 1.3, 0) + U.clamp((interest(c, m) - 50) / 10, -4, 3);
+  }
+
+  // How much of a college's recruiting happens in the states in the game (scales its offer slots).
+  function share(c, center) {
+    return U.clamp(1.2 - U.distKm(c, center) / 1500, 0.35, 1);
+  }
+
+  function slotsFor(c, cy, pos, center) {
+    const need = 0.6 + 0.8 * (noise(c, { h: FNG.hashString(cy + '|' + pos) }, 1, 3) / 6 + 0.5);
+    return Math.max(1, Math.round(SLOTS[pos] * need * share(c, center)));
+  }
+
+  /*
+   * Weekly update. pool: [{ p, s, sc, cy }] for every player within reach of an offer.
+   * ctx: { year, week, progress, rankOf(id), perf, center, sosMean }.
+   * Returns new offers and withdrawn offers: [{ cid, pid, kind }].
+   */
+  function update(cr, pool, ctx) {
+    if (!cr.meta) cr.meta = {};
+    const ms = pool.filter((x) => x.sc + (cr.off[x.cy] || 0) >= POOL_MIN).map((x) => prepare(metrics(x.p, x.s, x.sc, x.cy, ctx.year, ctx.rankOf(x.p.id), ctx.perf[x.p.id], cr.off, ctx.sosMean)));
+    ms.sort((a, b) => b.ub - a.ub);
+    for (const m of ms) {
+      relCode(LIST[0], m.s.state);
+      m.rel = REL[m.s.state];
+      const list = cr.offers[m.p.id];
+      m.held = null;
+      if (list) {
+        m.held = new Uint8Array(LIST.length);
+        for (const o of list) if (BY_ID[o[0]]) m.held[BY_ID[o[0]].i] = 1;
+      }
+    }
+    const byPid = {};
+    for (const m of ms) byPid[m.p.id] = m;
+    // Offer counts per college, class and position (players outside the pool still count).
+    const counts = {};
+    const posOf = {};
+    for (const m of ms) posOf[m.p.id] = [m.cy, m.p.pos];
+    for (const pid in cr.offers) {
+      const key = posOf[pid] || cr.meta[pid];
+      if (!key) continue;
+      for (const o of cr.offers[pid]) {
+        const k = o[0] + '|' + key[0] + '|' + key[1];
+        counts[k] = (counts[k] || 0) + 1;
+      }
+    }
+    const events = [];
+    for (const c of LIST) {
+      // Same as evaluate(), unrolled: this loop runs for every college and prospect each week.
+      const bar = band(c);
+      const q = c.prestige / 100;
+      const rch = reach(c);
+      const home = [0, 1, 2 + (100 - c.prestige) * 0.04];
+      const time = (1 - U.clamp(ctx.progress, 0, 1)) * 1.5;
+      const cands = [];
+      for (const m of ms) {
+        if (m.ub < bar + WITHDRAW_AT) break;
+        const held = m.held !== null && m.held[c.i] === 1;
+        if (m.ub < bar && !held) continue;
+        const base = m.v0 + q * m.v1 - bar + home[m.rel[c.i]] - Math.max(0, m.d[c.i] - rch) / 140 - CLASS_PEN[m.cls] - (m.cls ? time : 0);
+        if (base + 3 + NOISE_MAX < (held ? WITHDRAW_AT : 0)) {
+          if (held) cands.push([m, -Infinity]);
+          continue;
+        }
+        cands.push([m, finish(c, m, base)]);
+      }
+      cands.sort((a, b) => b[1] - a[1]);
+      for (const [m, e] of cands) {
+        const list = cr.offers[m.p.id];
+        const at = list ? list.findIndex((o) => o[0] === c.id) : -1;
+        const k = c.id + '|' + m.cy + '|' + m.p.pos;
+        if (at >= 0) {
+          if (e < WITHDRAW_AT) {
+            list.splice(at, 1);
+            counts[k]--;
+            events.push({ cid: c.id, pid: m.p.id, kind: 'pulled' });
+          }
+          continue;
+        }
+        if (e < 0) continue;
+        // A staff won't spend an offer on an out-of-state player with almost no interest in the school.
+        if (m.rel[c.i] !== 2 && interest(c, m) < NO_CHANCE) continue;
+        const slots = slotsFor(c, m.cy, m.p.pos, ctx.center);
+        const have = counts[k] || 0;
+        // Top-10 national prospects get offers even when the position is already well stocked.
+        const elite = m.rank > 0 && m.rank <= 10;
+        if (!elite && e - (4 * have) / slots < 0) continue;
+        if (have >= slots + OVERFLOW + (elite ? 2 : 0) || (have >= slots && e < MUST_HAVE && !elite)) continue;
+        const entry = cr.offers[m.p.id] || (cr.offers[m.p.id] = []);
+        entry.push([c.id, ctx.year, ctx.week]);
+        counts[k] = have + 1;
+        events.push({ cid: c.id, pid: m.p.id, kind: 'offer' });
+      }
+    }
+    // Remember class and position so offers to players who leave the pool keep counting against needs.
+    for (const pid in cr.offers) {
+      if (!cr.offers[pid].length) delete cr.offers[pid];
+      else if (byPid[pid]) cr.meta[pid] = [byPid[pid].cy, byPid[pid].p.pos];
+    }
+    for (const pid in cr.meta) if (!cr.offers[pid]) delete cr.meta[pid];
+    for (const ev of events) cr.wire.unshift([ctx.year, ctx.week, ev.cid, ev.pid, ev.kind]);
+    if (cr.wire.length > WIRE) cr.wire.length = WIRE;
+    return events;
+  }
+
+  // Projection offsets: how far each class trails the seniors at the same national rank.
+  function offsets(classes, year) {
+    const ref = (cy) => {
+      const l = classes[cy];
+      if (!l || !l.length) return null;
+      return l[Math.min(49, l.length - 1)][1];
+    };
+    const senior = ref(year + 1);
+    const out = {};
+    for (const cy in classes) {
+      const v = ref(cy);
+      out[cy] = senior != null && v != null ? Math.round((senior - v) * 10) / 10 : 0;
+    }
+    return out;
+  }
+
+  // Offers for one player, most interesting first: [{ college, year, week, interest }].
+  function offersFor(cr, m) {
+    const list = cr.offers[m.p.id];
+    if (!list) return [];
+    return list.map((o) => ({ college: BY_ID[o[0]], year: o[1], week: o[2], interest: interest(BY_ID[o[0]], m) })).filter((o) => o.college).sort((a, b) => b.interest - a.interest || b.college.prestige - a.college.prestige);
+  }
+
+  // Colleges evaluating a player that have not offered yet (closest to offering first).
+  function suitors(cr, m, progress, n) {
+    const have = new Set((cr.offers[m.p.id] || []).map((o) => o[0]));
+    return LIST.filter((c) => !have.has(c.id))
+      .map((c) => ({ college: c, gap: evaluate(c, m, progress), interest: interest(c, m) }))
+      .filter((x) => x.gap > -3)
+      .sort((a, b) => b.gap - a.gap)
+      .slice(0, n || 5);
+  }
+
+  // Where a senior signs: the offering college he likes best (a little randomness, fixed per player).
+  function choose(cr, m) {
+    const list = offersFor(cr, m);
+    if (!list.length) return null;
+    let best = null;
+    let bestV = -Infinity;
+    for (const o of list) {
+      const v = o.interest + noise(o.college, m, 8, 99);
+      if (v > bestV) {
+        bestV = v;
+        best = o;
+      }
+    }
+    return best;
+  }
+
+  // Signing day: seniors: [{ m, name }]. Records each signee in his college's class and clears his offers.
+  function sign(cr, seniors, year) {
+    const out = {};
+    const signed = (cr.signed[year] = []);
+    for (const { m, name } of seniors) {
+      const pick = choose(cr, m);
+      if (pick) {
+        out[m.p.id] = pick;
+        signed.push([pick.college.id, m.p.id, name, m.p.pos, m.s.id, m.stars, m.rank, Math.round(m.sc * 10) / 10, (cr.offers[m.p.id] || []).length]);
+        cr.wire.unshift([year, 17, pick.college.id, m.p.id, 'signed']);
+      }
+      delete cr.offers[m.p.id];
+      delete cr.meta[m.p.id];
+    }
+    if (cr.wire.length > WIRE) cr.wire.length = WIRE;
+    for (const y in cr.signed) if (Number(y) <= year - SIGNED_YEARS) delete cr.signed[y];
+    return out;
+  }
+
+  // Every current offer from one college: [{ pid, year, week }].
+  function offersBy(cr, cid) {
+    const out = [];
+    for (const pid in cr.offers) for (const o of cr.offers[pid]) if (o[0] === cid) out.push({ pid, year: o[1], week: o[2] });
+    return out;
+  }
+
+  function confName(id) {
+    return CONF_NAME[id] || id;
+  }
+
+  FNG.Colleges = {
+    LIST, POOL_MIN, NEIGHBORS, get, init, band, reach, relation, metrics, value, interest, interestLabel, evaluate,
+    update, offsets, offersFor, suitors, sign, offersBy, confName, share, slotsFor,
+  };
+})();

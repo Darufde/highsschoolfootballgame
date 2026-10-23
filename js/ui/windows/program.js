@@ -109,7 +109,7 @@
             { key: 'o', label: 'Ovr', render: (g) => ovrChip(g.ovr), cls: 'c' },
             { key: 'c', label: 'Ceiling', render: (g) => ovrChip(g.pot), cls: 'c' },
             { key: 'rk', label: 'Final Rank', render: (g) => (g.rank ? h('span', { class: 'nowrap' }, stars(g.stars), ' #' + g.rank) : h('span', { class: 'dim' }, '—')) },
-            { key: 'nl', label: 'Next Level', render: (g) => h('span', { class: 'tag ' + (g.tier >= 4 ? 'gold' : g.tier >= 2 ? 'info' : '') }, g.outlook) },
+            { key: 'nl', label: 'Next Level', render: (g) => (g.cid ? h('span', { class: 'row nowrap', style: { gap: '6px' } }, FNG.UI.collegeLogo(FNG.Colleges.get(g.cid), 'sm'), h('button', { type: 'button', class: 'linklike', onclick: () => Win.college(g.cid) }, g.outlook), g.offers > 1 ? h('span', { class: 'tiny muted' }, 'chose from ' + g.offers + ' offers') : null) : h('span', { class: 'tag ' + (g.tier >= 4 ? 'gold' : g.tier >= 2 ? 'info' : '') }, g.outlook)) },
             { key: 'h', label: 'Honors', render: (g) => g.honors.join(', ') || '—', cls: 'muted' },
           ], O.graduates.sort((a, b) => b.tier - a.tier || (a.rank || 999) - (b.rank || 999) || b.ovr - a.ovr), { empty: 'No seniors this year.' }));
           body.appendChild(next('Player Development'));
@@ -153,7 +153,7 @@
           body.appendChild(h('div', { class: 'card mb' }, h('h3', { class: 'sect' }, 'Staff Changes'),
             O.staffChanges.length ? O.staffChanges.map((c) => h('div', { class: 'small' }, Coaches.ROLE[c.role].title + ' ' + c.name + ' ' + c.why + '.')) : h('div', { class: 'small muted' }, 'Your whole staff is returning.'),
             vacant.length ? h('div', { class: 'small warn-t mt' }, 'Open positions: ' + vacant.map((r) => r.title).join(', ') + '. Empty seats hurt development and game day.') : null));
-          body.appendChild(h('p', { class: 'muted small' }, 'Starting the new season ages every program in Ohio and Kentucky by a year, generates a fresh schedule and resets the standings.'));
+          body.appendChild(h('p', { class: 'muted small' }, 'Starting the new season ages every program in Ohio, Kentucky and Tennessee by a year, generates a fresh schedule and resets the standings.'));
           body.appendChild(next('Begin ' + (st.year + 1) + ' Season'));
         }
       },

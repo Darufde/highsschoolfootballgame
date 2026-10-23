@@ -31,7 +31,7 @@
         body.appendChild(h('div', { class: 'toolbar' },
           select(seasons, w.state.season, (v) => { w.state.season = v; WM.refresh(w.id); }),
           h('div', { class: 'grow' }),
-          w.state.season === 'current' ? h('span', { class: 'small muted' }, 'Varsity ' + u.rec.w + '-' + u.rec.l + ' · ' + (u.state === 'KY' ? 'District ' : 'League ') + u.rec.lw + '-' + u.rec.ll + ' · PF ' + u.rec.pf + ' · PA ' + u.rec.pa + ' · JV ' + st.lower.JV.w + '-' + st.lower.JV.l + ' · Freshman ' + st.lower.FR.w + '-' + st.lower.FR.l) : null));
+          w.state.season === 'current' ? h('span', { class: 'small muted' }, 'Varsity ' + u.rec.w + '-' + u.rec.l + ' · ' + World.leagueWord(u.state) + ' ' + u.rec.lw + '-' + u.rec.ll + ' · PF ' + u.rec.pf + ' · PA ' + u.rec.pa + ' · JV ' + st.lower.JV.w + '-' + st.lower.JV.l + ' · Freshman ' + st.lower.FR.w + '-' + st.lower.FR.l) : null));
 
         if (w.state.season !== 'current') {
           const hist = st.history.find((x) => String(x.year) === w.state.season);
@@ -69,7 +69,7 @@
           },
           { key: 'orec', label: 'Opp Rec', render: (r) => (r.g ? (() => { const o = Season.opponentOf(st, r.g, st.userId); return o.rec.w + '-' + o.rec.l; })() : ''), cls: 'num' },
           { key: 'div', label: 'Class', render: (r) => { if (!r.g) return ''; const o = Season.opponentOf(st, r.g, st.userId); return World.divShort(o) + (o.state !== u.state ? ' ' + o.state : ''); } },
-          { key: 'type', label: 'Type', render: (r) => (!r.g ? '' : r.g.playoff ? h('span', { class: 'tag gold' }, Season.ROUND_NAMES[r.g.playoff.round]) : r.g.league ? h('span', { class: 'tag team' }, u.state === 'KY' ? 'District' : 'League') : h('span', { class: 'tag' }, 'Non-league')) },
+          { key: 'type', label: 'Type', render: (r) => (!r.g ? '' : r.g.playoff ? h('span', { class: 'tag gold' }, Season.ROUND_NAMES[r.g.playoff.round]) : r.g.league ? h('span', { class: 'tag team' }, World.leagueWord(u.state)) : h('span', { class: 'tag' }, 'Non-league')) },
           {
             key: 'res', label: 'Result', render: (r) => {
               if (!r.g) return '';

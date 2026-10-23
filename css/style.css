@@ -133,6 +133,41 @@ body { display: flex; flex-direction: column; background: linear-gradient(180deg
 }
 .sbadge.sm { width: 20px; height: 20px; font-size: 8.5px; border-width: 1.5px; border-radius: 5px; }
 .sbadge.lg { width: 56px; height: 56px; font-size: 18px; border-width: 3px; border-radius: 14px; }
+
+/* College logos: the image when a logo file exists, otherwise a badge in the college's colors. */
+.clogo {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1.5px solid transparent;
+  font-weight: 800;
+  font-size: 8.5px;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  vertical-align: middle;
+  line-height: 1;
+}
+.clogo .ab.long { font-size: 0.82em; letter-spacing: -0.02em; }
+.clogo.img { background: transparent; border-color: transparent; }
+.clogo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.clogo.sm { width: 20px; height: 20px; font-size: 7px; border-radius: 5px; }
+.clogo.md { width: 34px; height: 34px; font-size: 10.5px; border-radius: 8px; }
+.clogo.lg { width: 64px; height: 64px; font-size: 18px; border-radius: 14px; border-width: 3px; }
+.logo-strip { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px; vertical-align: middle; }
+.logo-strip button { padding: 0; border: 0; background: none; cursor: pointer; display: inline-grid; border-radius: 6px; }
+.logo-strip button:hover .clogo, .logo-strip button:focus-visible .clogo { outline: 2px solid var(--info); outline-offset: 1px; }
+.logo-strip .more { font-size: 11px; color: var(--muted); font-weight: 700; margin-left: 2px; }
+.offer-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 96px; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.offer-row:last-child { border-bottom: 0; }
+.ibar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.07); overflow: hidden; margin-top: 3px; }
+.ibar i { display: block; height: 100%; border-radius: 3px; }
+.game-offers { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.game-offers .gp { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.game-offers .gp:last-child { border-bottom: 0; }
+.game-offers .gp .logo-strip { grid-column: 1 / -1; }
 .btn {
   display: inline-flex;
   align-items: center;
@@ -504,6 +539,7 @@ table.data td.c, table.data th.c { text-align: center; }
   .grid.c3, .grid.c4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid.c2 { grid-template-columns: 1fr; }
   .preview { grid-template-columns: 1fr; }
+  .game-offers { grid-template-columns: 1fr; }
   .preview .vs { text-align: center; }
   .hero .name { font-size: 19px; }
 }
