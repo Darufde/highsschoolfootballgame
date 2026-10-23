@@ -153,7 +153,7 @@
           body.appendChild(h('div', { class: 'card mb' }, h('h3', { class: 'sect' }, 'Staff Changes'),
             O.staffChanges.length ? O.staffChanges.map((c) => h('div', { class: 'small' }, Coaches.ROLE[c.role].title + ' ' + c.name + ' ' + c.why + '.')) : h('div', { class: 'small muted' }, 'Your whole staff is returning.'),
             vacant.length ? h('div', { class: 'small warn-t mt' }, 'Open positions: ' + vacant.map((r) => r.title).join(', ') + '. Empty seats hurt development and game day.') : null));
-          body.appendChild(h('p', { class: 'muted small' }, 'Starting the new season ages every program in Ohio, Kentucky and Tennessee by a year, generates a fresh schedule and resets the standings.'));
+          body.appendChild(h('p', { class: 'muted small' }, 'Starting the new season ages every program in all five states by a year, generates a fresh schedule and resets the standings.'));
           body.appendChild(next('Begin ' + (st.year + 1) + ' Season'));
         }
       },
@@ -205,7 +205,7 @@
         const st = App.state;
         if (st) {
           body.appendChild(h('div', { class: 'card mb' }, h('h3', { class: 'sect' }, 'Saving'),
-            h('div', { class: 'row between' }, h('span', null, 'Auto-save after every change'), seg([{ value: true, label: 'On' }, { value: false, label: 'Off' }], st.settings.autoSave, (v) => { st.settings.autoSave = v; App.changed(); App.save(true); })),
+            h('div', { class: 'row between' }, h('span', null, 'Auto-save (at most every 30 seconds while you play, and when you leave)'), seg([{ value: true, label: 'On' }, { value: false, label: 'Off' }], st.settings.autoSave, (v) => { st.settings.autoSave = v; App.changed(); App.save(true); })),
             h('div', { class: 'row mt' },
               h('button', { type: 'button', class: 'btn primary', onclick: () => App.save() }, icon('save', 15), 'Save Now'),
               h('button', { type: 'button', class: 'btn', onclick: () => App.exportSave() }, 'Export Save'),

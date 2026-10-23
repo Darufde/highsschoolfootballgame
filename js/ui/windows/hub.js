@@ -43,7 +43,7 @@
       h('div', { class: 'small', style: { margin: '6px 0' } }, rankLine(st, s)),
       h('div', { class: 'tiny muted bold' }, 'TOP RECRUITS'),
       recruits.length ? recruits.map((x) => h('div', { class: 'small', style: { marginTop: '3px' } },
-        FNG.UI.stars(x.info.stars), ' ', h('button', { type: 'button', class: 'linklike', onclick: () => open(x.p) }, FNG.Players.shortName(x.p)), ' ' + x.p.pos + ' · #' + x.info.rank + ' \u2019' + String(x.info.classYear).slice(2) + (x.info.offers.length ? ' · ' + x.info.offers.length + ' offers' : '')))
+        FNG.UI.stars(x.info.stars), ' ', FNG.CollegeView.playerName(st, x.p, FNG.Players.shortName(x.p), () => open(x.p)), ' ' + x.p.pos + ' · #' + x.info.rank + ' \u2019' + String(x.info.classYear).slice(2) + (x.info.offers.length && !x.info.offers[0].committed ? ' · ' + x.info.offers.length + ' offers' : '')))
         : h('div', { class: 'small dim' }, 'No ranked recruits'));
   }
 
@@ -63,7 +63,7 @@
     card.appendChild(h('div', { class: 'row between' }, h('h3', { class: 'sect', style: { margin: 0 } }, label), h('span', { class: 'small muted' }, App.dateLabel(st))));
     if (!g) {
       if (st.phase === 'playoffs' && !Season.userAlive(st)) {
-        const why = u.state !== 'OH' ? 'Your regular season is complete. ' + World.stateName(u.state) + '’s ' + (u.state === 'KY' ? 'KHSAA' : 'TSSAA') + ' playoffs are not in the game yet.' : u.rec.seed ? 'Your season is over (' + u.rec.result + ').' : 'You did not qualify for the playoffs this year.';
+        const why = !World.hasPlayoffs(u.state) ? 'Your regular season is complete. ' + World.stateName(u.state) + '’s ' + World.assoc(u.state) + ' playoffs are not in the game yet.' : u.rec.seed ? 'Your season is over (' + u.rec.result + ').' : 'You did not qualify for the playoffs this year.';
         card.append(h('p', null, why),
           h('p', { class: 'muted small' }, 'Follow the Ohio brackets or jump ahead to the offseason.'),
           h('div', { class: 'row' },
@@ -132,7 +132,7 @@
         const nat = Season.teamStanding(st, u, 'national');
         const sta = Season.teamStanding(st, u, 'state');
         const dvr = Season.teamStanding(st, u, 'division');
-        const oh = u.state === 'OH';
+        const oh = !!u.region;
         const levels = { V: 0, JV: 0, FR: 0 };
         for (const p of st.roster) levels[p.level]++;
 

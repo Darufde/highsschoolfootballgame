@@ -2,11 +2,13 @@
 (function () {
   'use strict';
   const FNG = window.FNG;
-  const { Season, Players, Recruits, World } = FNG;
+  const { U, Season, Players, Recruits, World } = FNG;
   const { h, badge, table, select, seg, stars, ovrChip, attrBar } = FNG.UI;
   const WM = FNG.WM;
   const App = FNG.App;
   const Win = FNG.Win;
+
+  const PAGE = 100;
 
   // ▲3 / ▼2 / — / NEW relative to the previous rankings.
   function moveTag(move) {
@@ -21,7 +23,7 @@
     return 'Class of ' + cy + ' (' + (['', 'Freshmen', 'Sophomores', 'Juniors', 'Seniors'][grade] || '') + ')';
   }
 
-  // Power conference offers (count and logos); lower-level offers show as a count when there are none.
+  // Major college offers (count and logos); lower-level offers show as a count when there are none.
   function offersCell(info) {
     if (info.offers.length) return FNG.CollegeView.offersCell(info.offers, 4);
     if (info.otherOffers.length) return h('span', { class: 'small muted', title: info.otherOffers.map((o) => o.name).join(', ') }, info.otherOffers.length + ' other');
@@ -38,7 +40,7 @@
       title: 'Recruit Rankings',
       icon: 'star',
       wide: true,
-      state: { cy: null, st: 'all', pos: 'ALL', team: 'all', off: 'all' },
+      state: { cy: null, st: 'all', pos: 'ALL', team: 'all', off: 'all', stars: 0, page: 0 },
       render(body, w) {
         const st = App.state;
         const S = w.state;
@@ -55,7 +57,7 @@
         if (!S.cy || !R.classes[S.cy]) S.cy = years[0];
         const all = R.classes[S.cy].map((e, i) => {
           const f = Season.findPlayer(st, e[0]);
-          return f ? { p: f.p, s: f.s, rank: i + 1, score: e[1] } : null;
+          return f ? { p: f.p, s: f.s, rank: i + 1, score: e[1], prev: e[2] || 0 } : null;
         }).filter(Boolean);
         const posRank = {};
         const stateRank = {};
@@ -69,25 +71,29 @@
         }
         const teams = [...new Set(all.map((r) => r.s))].sort((a, b) => a.name.localeCompare(b.name));
         const offered = (r) => !!(st.cr && st.cr.offers[r.p.id]);
-        let rows = all.filter((r) => (S.st === 'all' || r.s.state === S.st) && (S.pos === 'ALL' || r.p.pos === S.pos) && (S.team === 'all' || r.s.id === S.team) && (S.off === 'all' || (S.off === 'offered') === offered(r)));
+        let rows = all.filter((r) => (S.st === 'all' || r.s.state === S.st) && (S.pos === 'ALL' || r.p.pos === S.pos) && (S.team === 'all' || r.s.id === S.team) && (S.off === 'all' || (S.off === 'offered') === offered(r)) && (!S.stars || Recruits.stars(r.rank) === S.stars));
+        const pages = Math.max(1, Math.ceil(rows.length / PAGE));
+        if (S.page >= pages) S.page = pages - 1;
+        const set = (k) => (v) => { S[k] = v; S.page = 0; WM.refresh(w.id); };
 
         body.appendChild(h('p', { class: 'muted small', style: { marginTop: 0 } },
-          'Rankings as of ' + R.label + ' ' + R.year + '. Prospects are rated on ability, career ceiling, size and speed for the position, production this season and level of competition. The top ' + Recruits.RANKED_PER_CLASS + ' in each class are ranked; stars come from national rank (5★ top 3, 4★ top 25, 3★ top 100). Offers are from power conference programs (logos open each college\u2019s recruiting page).'));
-        body.appendChild(h('div', { class: 'toolbar' }, seg(years.map((y) => ({ value: y, label: classLabel(st, y) })), S.cy, (v) => { S.cy = v; S.team = 'all'; WM.refresh(w.id); })));
+          'Rankings as of ' + R.label + ' ' + R.year + '. Prospects are rated on ability, career ceiling, size and speed for the position, production this season and level of competition. The top ' + U.num(Recruits.RANKED_PER_CLASS) + ' in each class are ranked, and stars come from national rank: ' + [5, 4, 3, 2, 1].map((n) => U.num(Recruits.STAR_COUNTS[n]) + ' ' + n + '★').join(', ') + '. Offers are from the major college programs (logos open each college\u2019s recruiting page).'));
+        body.appendChild(h('div', { class: 'toolbar' }, seg(years.map((y) => ({ value: y, label: classLabel(st, y) })), S.cy, (v) => { S.cy = v; S.team = 'all'; S.page = 0; WM.refresh(w.id); })));
         body.appendChild(h('div', { class: 'toolbar' },
-          select([{ value: 'all', label: 'All states' }].concat(World.STATES.map((k) => ({ value: k, label: World.stateName(k) }))), S.st, (v) => { S.st = v; WM.refresh(w.id); }),
-          select([{ value: 'all', label: 'Any offers' }, { value: 'offered', label: 'Has power offers' }, { value: 'none', label: 'No power offers' }], S.off, (v) => { S.off = v; WM.refresh(w.id); }),
-          select([{ value: 'ALL', label: 'All positions' }].concat(Players.POSITIONS.map((p) => ({ value: p, label: Players.POS_NAME[p] }))), S.pos, (v) => { S.pos = v; WM.refresh(w.id); }),
-          select([{ value: 'all', label: 'All teams' }, { value: st.userId, label: '★ ' + Season.user(st).name }].concat(teams.filter((t) => !t.isUser).map((t) => ({ value: t.id, label: t.name + ' (' + t.state + ')' }))), S.team, (v) => { S.team = v; WM.refresh(w.id); }),
+          select([{ value: 'all', label: 'All states' }].concat(Season.states(st).map((k) => ({ value: k, label: World.stateName(k) }))), S.st, set('st')),
+          select([{ value: 0, label: 'All stars' }].concat([5, 4, 3, 2, 1].map((n) => ({ value: n, label: n + '★ (' + U.num(Recruits.STAR_COUNTS[n]) + ')' }))), S.stars, (v) => set('stars')(Number(v))),
+          select([{ value: 'all', label: 'Any offers' }, { value: 'offered', label: 'Has major offers' }, { value: 'none', label: 'No major offers' }], S.off, set('off')),
+          select([{ value: 'ALL', label: 'All positions' }].concat(Players.POSITIONS.map((p) => ({ value: p, label: Players.POS_NAME[p] }))), S.pos, set('pos')),
+          select([{ value: 'all', label: 'All teams' }, { value: st.userId, label: '★ ' + Season.user(st).name }].concat(teams.filter((t) => !t.isUser).map((t) => ({ value: t.id, label: t.name + ' (' + t.state + ')' }))), S.team, set('team')),
           h('div', { class: 'grow' }),
-          h('span', { class: 'small muted' }, rows.length + ' ranked prospects')));
+          h('span', { class: 'small muted' }, U.num(rows.length) + ' ranked prospects')));
 
         const cols = [
           { key: 'rk', label: 'Natl', render: (r) => h('b', { class: 'num' }, r.rank), cls: 'num' },
-          { key: 'mv', label: '+/-', render: (r) => moveTag(R.prev[r.p.id] ? R.prev[r.p.id] - r.rank : null) },
+          { key: 'mv', label: '+/-', render: (r) => moveTag(r.prev ? r.prev - r.rank : null) },
           S.st !== 'all' ? { key: 'srk', label: S.st, render: (r) => stateRank[r.p.id], cls: 'num' } : null,
           { key: 'prk', label: 'Pos Rk', render: (r) => r.p.pos + ' #' + posRank[r.p.id], cls: 'muted' },
-          { key: 'n', label: 'Prospect', render: (r) => h('button', { type: 'button', class: 'linklike', onclick: () => openPlayer(st, r.p) }, Players.fullName(r.p)) },
+          { key: 'n', label: 'Prospect', render: (r) => FNG.CollegeView.playerName(st, r.p, Players.fullName(r.p), () => openPlayer(st, r.p)) },
           { key: 'pos', label: 'Pos', render: (r) => r.p.pos },
           { key: 'hw', label: 'Ht/Wt', render: (r) => Players.heightStr(r.p.ht) + ' ' + r.p.wt, cls: 'muted' },
           { key: 'sch', label: 'School', render: (r) => h('div', { class: 'row nowrap', style: { gap: '6px' } }, badge(r.s, st, 'sm'), h('button', { type: 'button', class: 'linklike', onclick: () => Win.school(r.s.id) }, r.s.name), h('span', { class: 'tiny muted' }, r.s.state)) },
@@ -96,7 +102,17 @@
           { key: 'stat', label: 'This Season', render: (r) => Recruits.statLine(r.p, st.perf[r.p.id]) || h('span', { class: 'dim' }, '—'), cls: 'muted' },
           { key: 'off', label: 'Offers', render: (r) => offersCell(Season.recruitInfo(st, r.p, r.s)) },
         ].filter(Boolean);
-        body.appendChild(table(cols, rows, { rowClass: (r) => (r.s.isUser ? 'me' : ''), empty: 'No ranked prospects match these filters.' }));
+        body.appendChild(table(cols, rows.slice(S.page * PAGE, (S.page + 1) * PAGE), { rowClass: (r) => (r.s.isUser ? 'me' : ''), empty: 'No ranked prospects match these filters.' }));
+        if (pages > 1) {
+          const go = (n) => { S.page = U.clamp(n, 0, pages - 1); WM.refresh(w.id); };
+          const opts = [];
+          for (let i = 0; i < pages; i++) opts.push({ value: i, label: U.num(i * PAGE + 1) + '–' + U.num(Math.min(rows.length, (i + 1) * PAGE)) });
+          body.appendChild(h('div', { class: 'row mt', style: { justifyContent: 'center', gap: '8px' } },
+            h('button', { type: 'button', class: 'btn sm', disabled: S.page === 0, onclick: () => go(S.page - 1) }, '‹ Prev'),
+            select(opts, S.page, (v) => go(Number(v))),
+            h('span', { class: 'small muted' }, 'of ' + U.num(rows.length)),
+            h('button', { type: 'button', class: 'btn sm', disabled: S.page >= pages - 1, onclick: () => go(S.page + 1) }, 'Next ›')));
+        }
       },
     });
   };
@@ -115,6 +131,7 @@
         }
         const { p, s } = f;
         const info = Season.recruitInfo(st, p, s);
+        const commit = Season.collegeCommit(st, p);
         WM.setTitle(w.id, Players.fullName(p));
         const cy = Recruits.classYear(p, st.year);
         body.appendChild(h('div', { class: 'hero' },
@@ -122,7 +139,8 @@
           h('div', { class: 'grow', style: { position: 'relative', zIndex: 1 } },
             h('div', { class: 'name' }, '#' + p.num + ' ' + Players.fullName(p)),
             h('div', { class: 'meta' }, Players.POS_NAME[p.pos] + ' · Class of ' + cy + ' · ' + Players.heightStr(p.ht) + ', ' + p.wt + ' lbs'),
-            h('div', { class: 'meta' }, h('button', { type: 'button', class: 'linklike', style: { color: '#fff' }, onclick: () => Win.school(s.id) }, s.name), ' · ' + s.city + ', ' + World.stateName(s.state) + ' · ' + World.divLabel(s))),
+            h('div', { class: 'meta' }, h('button', { type: 'button', class: 'linklike', style: { color: '#fff' }, onclick: () => Win.school(s.id) }, s.name), ' · ' + s.city + ', ' + World.stateName(s.state) + ' · ' + World.divLabel(s)),
+            commit ? h('div', { class: 'meta' }, FNG.CollegeView.commitChip(commit.college, 'Committed to ' + commit.college.name, () => Win.college(commit.college.id))) : null),
           h('div', { class: 'right', style: { position: 'relative', zIndex: 1 } },
             info ? h('div', null, stars(info.stars), h('div', { style: { fontSize: '22px', fontWeight: 800 } }, '#' + info.rank), h('div', { class: 'small', style: { color: 'rgba(255,255,255,.75)' } }, 'Class of ' + info.classYear + ' · ', moveTag(info.move))) : h('div', { class: 'small' }, 'Unranked'))));
         const film = st.program.facilities.film >= 3 || s.isUser;
@@ -133,7 +151,7 @@
               h('dt', null, 'National rank'), h('dd', null, '#' + info.rank + ' in the class of ' + info.classYear),
               h('dt', null, 'Movement'), h('dd', null, info.prev ? 'Was #' + info.prev + ' ' : 'Newly ranked ', moveTag(info.move)),
               h('dt', null, 'This season'), h('dd', null, Recruits.statLine(p, st.perf[p.id]) || '—'),
-              h('dt', null, 'Offers'), h('dd', null, info.offers.length ? FNG.CollegeView.logoStrip(info.offers, 12) : 'No power conference offers yet')) : h('p', { class: 'muted small' }, 'Not currently ranked in the class of ' + cy + '.')),
+              h('dt', null, 'Offers'), h('dd', null, commit ? 'Committed to ' + commit.college.name : info.offers.length ? FNG.CollegeView.logoStrip(info.offers, 12) : 'No major college offers yet')) : h('p', { class: 'muted small' }, 'Not currently ranked in the class of ' + cy + '.')),
           FNG.CollegeView.offersCard(st, p, s),
           h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Scouting'), h('dl', { class: 'kv' },
             h('dt', null, 'Overall'), h('dd', null, film ? ovrChip(Players.ovr(p)) : '?'),

@@ -1,8 +1,8 @@
 # College logos
 
-Put each college's logo in this folder, named by the college's id. The game looks for `<id>.png` first, then `.svg`, `.webp` and `.jpg`. Square images with transparent backgrounds look best; they are shown from 20px up to 64px.
+Every college in the game has its logo here, named by the college's id. **A college without a logo is not in the game**: to add a college, add its logo here and its row to `js/data/colleges.js`; to remove one, delete both.
 
-A college without a logo file shows a badge in its colors with its abbreviation instead, so the game works with any subset of logos.
+The files are WebP images with a `.png` name, which every modern browser displays. Square images with transparent backgrounds look best; they are shown from 20px up to 64px.
 
 ## Big Ten
 
@@ -90,6 +90,76 @@ A college without a logo file shows a badge in its colors with its abbreviation 
 | UCF | `ucf.png` |
 | Utah | `utah.png` |
 | West Virginia | `west-virginia.png` |
+
+## Pac-12
+
+| College | File |
+| --- | --- |
+| Boise State | `boise-state.png` |
+| Colorado State | `colorado-state.png` |
+| Fresno State | `fresno-state.png` |
+| Oregon State | `oregon-state.png` |
+| San Diego State | `san-diego-state.png` |
+| Texas State | `texas-state.png` |
+| Utah State | `utah-state.png` |
+| Washington State | `washington-state.png` |
+
+## American
+
+| College | File |
+| --- | --- |
+| Army | `army.png` |
+| Charlotte | `charlotte.png` |
+| East Carolina | `east-carolina.png` |
+| FAU | `fau.png` |
+| Memphis | `memphis.png` |
+| Navy | `navy.png` |
+| North Texas | `north-texas.png` |
+| Rice | `rice.png` |
+| Temple | `temple.png` |
+| Tulane | `tulane.png` |
+| Tulsa | `tulsa.png` |
+| UAB | `uab.png` |
+| USF | `usf.png` |
+| UTSA | `utsa.png` |
+
+## Mountain West
+
+| College | File |
+| --- | --- |
+| Air Force | `air-force.png` |
+| Hawaii | `hawaii.png` |
+| Nevada | `nevada.png` |
+| New Mexico | `new-mexico.png` |
+| Northern Illinois | `northern-illinois.png` |
+| San José State | `san-jose-state.png` |
+| UNLV | `unlv.png` |
+| UTEP | `utep.png` |
+| Wyoming | `wyoming.png` |
+
+## Sun Belt
+
+| College | File |
+| --- | --- |
+| App State | `appalachian-state.png` |
+| Arkansas State | `arkansas-state.png` |
+| Coastal Carolina | `coastal-carolina.png` |
+| Georgia Southern | `georgia-southern.png` |
+| Georgia State | `georgia-state.png` |
+| James Madison | `james-madison.png` |
+| Louisiana | `louisiana.png` |
+| Marshall | `marshall.png` |
+| Old Dominion | `old-dominion.png` |
+| South Alabama | `south-alabama.png` |
+| Southern Miss | `southern-miss.png` |
+| Troy | `troy.png` |
+| UL Monroe | `louisiana-monroe.png` |
+
+## Conference USA
+
+| College | File |
+| --- | --- |
+| Louisiana Tech | `louisiana-tech.png` |
 
 ## Independent
 

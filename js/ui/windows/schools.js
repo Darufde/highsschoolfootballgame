@@ -45,9 +45,9 @@
         };
         const search = h('input', { class: 'input', placeholder: 'Search by school, city or county…', value: S.q, style: { width: '260px' }, oninput: (e) => { S.q = e.target.value; draw(); } });
         body.appendChild(h('div', { class: 'toolbar' }, search,
-          select([{ value: 'all', label: 'All states' }].concat(World.STATES.map((k) => ({ value: k, label: World.stateName(k) }))), S.st, (v) => { S.st = v; S.div = '0'; S.county = 'all'; WM.refresh(w.id); }),
+          select([{ value: 'all', label: 'All states' }].concat(Season.states(st).map((k) => ({ value: k, label: World.stateName(k) }))), S.st, (v) => { S.st = v; S.div = '0'; S.county = 'all'; WM.refresh(w.id); }),
           select([{ value: 'all', label: 'All types' }, { value: 'public', label: 'Public' }, { value: 'private', label: 'Private' }], S.type, (v) => { S.type = v; draw(); }),
-          S.st === 'all' ? null : select([{ value: '0', label: S.st === 'OH' ? 'All divisions' : 'All classes' }].concat(World.divisions(S.st).map((d) => ({ value: String(d), label: World.divLabel({ state: S.st, division: d }) }))), S.div, (v) => { S.div = v; draw(); }),
+          S.st === 'all' ? null : select([{ value: '0', label: /^Division/.test(World.divLabel({ state: S.st, division: 1 })) ? 'All divisions' : 'All classes' }].concat(World.divisions(S.st).map((d) => ({ value: String(d), label: World.divLabel({ state: S.st, division: d }) }))), S.div, (v) => { S.div = v; draw(); }),
           select([{ value: 'all', label: 'All counties' }].concat(counties.map((c) => ({ value: c, label: c + ' County' }))), S.county, (v) => { S.county = v; draw(); }),
           h('div', { class: 'grow' }), count));
         body.appendChild(results);
@@ -89,7 +89,7 @@
         const T = w.state.tab;
         if (T === 'overview') {
           const info = h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Profile'), h('dl', { class: 'kv' },
-            h('dt', null, 'Enrollment'), h('dd', null, U.num(s.enrollment) + (s.type === 'private' && s.state === 'OH' ? ' (×1.3 for divisions)' : '')),
+            h('dt', null, 'Enrollment'), h('dd', null, U.num(s.enrollment) + (s.type === 'private' && FNG.States.get(s.state).classes.method === 'ohio' ? ' (×1.3 for divisions)' : '')),
             h('dt', null, 'Coaching staff'), h('dd', null, s.isUser ? 'Yours' : s.staffQ >= 62 ? 'Excellent' : s.staffQ >= 52 ? 'Good' : s.staffQ >= 42 ? 'Average' : 'Below average'),
             h('dt', null, 'Tradition'), h('dd', null, stars(U.clamp(Math.round(s.prestige / 20), 1, 5)), ' ', h('span', { class: 'muted small' }, s.prestige + '/100')),
             h('dt', null, 'League record'), h('dd', null, s.rec.lw + '-' + s.rec.ll),
@@ -102,7 +102,7 @@
           const r = s.isUser ? Team.userRatings(st) : Season.scout(st, s);
           const recs = Season.topRecruits(st, s, 6);
           const recCard = h('div', { class: 'card' }, h('div', { class: 'row between' }, h('h3', { class: 'sect', style: { margin: 0 } }, 'Ranked Recruits'), recs.length ? h('button', { type: 'button', class: 'btn sm ghost', onclick: () => Win.recruits({ team: s.id }) }, 'Rankings') : null),
-            recs.length ? recs.map((x) => h('div', { class: 'small', style: { marginTop: '6px' } }, stars(x.info.stars), ' ', h('button', { type: 'button', class: 'linklike', onclick: () => (s.isUser ? Win.player(x.p.id) : Win.prospect(x.p.id)) }, Players.fullName(x.p)), ' · ' + x.p.pos + ' · #' + x.info.rank + ' class of ' + x.info.classYear, x.info.offers.length ? h('div', { style: { marginTop: '2px' } }, FNG.CollegeView.logoStrip(x.info.offers, 10)) : null)) : h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'No ranked recruits.'));
+            recs.length ? recs.map((x) => h('div', { class: 'small', style: { marginTop: '6px' } }, stars(x.info.stars), ' ', FNG.CollegeView.playerName(st, x.p, Players.fullName(x.p), () => (s.isUser ? Win.player(x.p.id) : Win.prospect(x.p.id))), ' · ' + x.p.pos + ' · #' + x.info.rank + ' class of ' + x.info.classYear, x.info.offers.length && !x.info.offers[0].committed ? h('div', { style: { marginTop: '2px' } }, FNG.CollegeView.logoStrip(x.info.offers, 10)) : null)) : h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'No ranked recruits.'));
           body.appendChild(h('div', { class: 'grid c2' }, h('div', { class: 'col' }, info, recCard), ratingBars(r, s.isUser ? 'Team Ratings' : 'Scouting Report' + (st.program.facilities.film < 4 ? ' (estimated)' : ''))));
         } else if (T === 'schedule') {
           const games = st.games.filter((g) => g.home === s.id || g.away === s.id).sort((a, b) => a.week - b.week);
@@ -122,7 +122,7 @@
           body.appendChild(h('p', { class: 'small muted', style: { marginTop: 0 } }, ro.length + ' varsity players. ' + (scouted ? 'Ratings from your film room.' : 'Upgrade the Film Room to level 3 to see individual ratings.')));
           body.appendChild(table([
             { key: 'num', label: '#', render: (p) => p.num, cls: 'num r' },
-            { key: 'n', label: 'Name', render: (p) => h('button', { type: 'button', class: 'linklike', onclick: () => Win.prospect(p.id) }, Players.fullName(p)) },
+            { key: 'n', label: 'Name', render: (p) => FNG.CollegeView.playerName(st, p, Players.fullName(p), () => Win.prospect(p.id)) },
             { key: 'p', label: 'Pos', render: (p) => p.pos },
             { key: 'y', label: 'Yr', render: (p) => Players.CLASS_NAME[p.year] },
             { key: 'o', label: 'Ovr', render: (p) => (scouted ? ovrChip(Players.ovr(p)) : h('span', { class: 'dim' }, '?')), cls: 'c' },

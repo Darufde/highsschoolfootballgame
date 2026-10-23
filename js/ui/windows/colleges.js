@@ -1,4 +1,4 @@
-/* Colleges: power conference programs, their recruiting pages, and offer widgets used across the game. */
+/* Colleges: the major college programs, their recruiting pages, and offer widgets used across the game. */
 (function () {
   'use strict';
   const FNG = window.FNG;
@@ -9,6 +9,9 @@
   const Win = FNG.Win;
 
   const CLASS_TAG = ['SR', 'JR', 'SO', 'FR'];
+
+  // Recruiting wire wording by event kind ("<college> <verb> <player>").
+  const WIRE_VERB = { offer: ' offers ', signed: ' signs ', commit: ' lands a commitment from ', decommit: ' loses the commitment of ', pulled: ' pulls its offer to ' };
 
   function openPlayer(st, p) {
     if (st.roster.includes(p)) Win.player(p.id);
@@ -35,19 +38,47 @@
     const n = max || offers.length;
     for (const o of offers.slice(0, n)) {
       const c = o.college || o;
-      el.appendChild(h('button', { type: 'button', title: c.name + (o.interest != null ? ' · interest ' + Colleges.interestLabel(o.interest).toLowerCase() : ''), 'aria-label': c.name, onclick: (e) => { e.stopPropagation(); Win.college(c.id); } }, collegeLogo(c, size || 'sm')));
+      el.appendChild(h('button', { type: 'button', class: o.committed ? 'committed' : null, title: c.name + (o.committed ? ' · committed' : o.interest != null ? ' · interest ' + Colleges.interestLabel(o.interest).toLowerCase() : ''), 'aria-label': c.name + (o.committed ? ' (committed)' : ''), onclick: (e) => { e.stopPropagation(); Win.college(c.id); } }, collegeLogo(c, size || 'sm')));
     }
     if (offers.length > n) el.appendChild(h('span', { class: 'more', title: offers.slice(n).map((o) => (o.college || o).name).join(', ') }, '+' + (offers.length - n)));
     return el;
   }
 
-  // Offers cell for tables: count plus the leading logos.
+  // Offers cell for tables: count plus the leading logos. A committed player's other offers no
+  // longer matter (his name carries the commitment banner), so the cell just says so.
   function offersCell(offers, max) {
     if (!offers.length) return h('span', { class: 'dim' }, '—');
+    if (offers[0].committed) return h('span', { class: 'small muted' }, 'Committed');
     return h('span', { class: 'row nowrap', style: { gap: '6px' } }, h('b', { class: 'num' }, offers.length), logoStrip(offers, max || 4));
   }
 
-  // Profile card: every power conference offer, other offers and colleges still evaluating the player.
+  // A committed player's name as a banner in his college's color, with its logo on the right.
+  function commitChip(college, label, onclick, big) {
+    const c1 = college.colors[0];
+    return h(onclick ? 'button' : 'span', {
+      type: onclick ? 'button' : null,
+      class: 'commit-chip' + (big ? ' big' : ''),
+      style: { background: 'linear-gradient(90deg, ' + c1 + ' 0%, ' + c1 + ' 60%, ' + FNG.UI.shade(c1, 0.35) + ' 100%)', color: FNG.UI.inkFor(c1) },
+      title: 'Committed to ' + college.name,
+      onclick: onclick ? (e) => { e.stopPropagation(); onclick(); } : null,
+    }, h('span', { class: 'nm' }, label), collegeLogo(college, big ? 'md' : 'sm'));
+  }
+
+  // A player's name as a link, or as his commitment banner if he has committed.
+  function playerName(st, p, label, onclick) {
+    const cm = Season.collegeCommit(st, p);
+    if (cm) return commitChip(cm.college, label, onclick);
+    return h('button', { type: 'button', class: 'linklike', onclick }, label);
+  }
+
+  // "Committed to X" banner for profiles.
+  function commitBanner(st, o) {
+    return h('div', null,
+      commitChip(o.college, 'Committed to ' + o.college.name, () => Win.college(o.college.id), true),
+      h('div', { class: 'tiny muted', style: { marginTop: '6px' } }, 'Verbal commitment ' + offeredWhen(st, o.commitYear, o.commitWeek) + '. He signs at the end of his senior season unless a better offer flips him.'));
+  }
+
+  // Profile card: every major college offer, other offers and colleges still evaluating the player.
   function offersCard(st, p, s) {
     const offers = Season.collegeOffers(st, p, s);
     const info = Season.recruitInfo(st, p, s);
@@ -56,16 +87,21 @@
     const card = h('div', { class: 'card' },
       h('div', { class: 'row between' }, h('h3', { class: 'sect', style: { margin: 0 } }, 'College Offers' + (offers.length ? ' · ' + offers.length : '')),
         h('button', { type: 'button', class: 'btn sm ghost', onclick: () => Win.colleges() }, 'All Colleges')));
+    if (offers.length && offers[0].committed) {
+      // Committed: the commitment is what matters, not the schools he passed on.
+      card.appendChild(commitBanner(st, offers[0]));
+      return card;
+    }
     if (offers.length) {
-      card.appendChild(h('div', { class: 'small muted', style: { margin: '4px 0 2px' } }, 'Power conference offers, by the player’s interest.'));
+      card.appendChild(h('div', { class: 'small muted', style: { margin: '4px 0 2px' } }, 'Major college offers, by the player’s interest.'));
       offers.forEach((o, i) => card.appendChild(h('div', { class: 'offer-row' },
         collegeLogo(o.college, 'md'),
         h('div', { style: { minWidth: 0 } },
-          h('div', { class: 'row nowrap', style: { gap: '6px' } }, h('button', { type: 'button', class: 'linklike bold', onclick: () => Win.college(o.college.id) }, o.college.name), i === 0 && offers.length > 1 ? h('span', { class: 'tag gold' }, 'Leader') : null),
+          h('div', { class: 'row nowrap', style: { gap: '6px' } }, h('button', { type: 'button', class: 'linklike bold', onclick: () => Win.college(o.college.id) }, o.college.name), o.committed ? h('span', { class: 'tag good' }, 'Committed') : i === 0 && offers.length > 1 && !offers[0].committed ? h('span', { class: 'tag gold' }, 'Leader') : null),
           h('div', { class: 'tiny muted' }, Colleges.confName(o.college.conf) + ' · ' + o.college.city + ', ' + o.college.state + ' · prestige ' + o.college.prestige + ' · offered ' + offeredWhen(st, o.year, o.week))),
         interestBar(o.interest))));
     } else {
-      card.appendChild(h('p', { class: 'small muted' }, p.year === 4 && st.phase === 'offseason' ? 'No power conference offers.' : 'No power conference offers yet.'));
+      card.appendChild(h('p', { class: 'small muted' }, p.year === 4 && st.phase === 'offseason' ? 'No major college offers.' : 'No major college offers yet.'));
     }
     if (others.length) card.appendChild(h('div', { class: 'small', style: { marginTop: '8px', whiteSpace: 'normal' } }, h('b', null, 'Other offers: '), others.map((o) => o.name + ' (' + Recruits.TIER_NAME[o.tier] + ')').join(', ')));
     if (suitors.length) {
@@ -80,11 +116,16 @@
     const side = (s) => {
       const list = Season.offeredPlayers(st, s);
       const col = h('div', null, h('div', { class: 'row nowrap', style: { gap: '6px', marginBottom: '4px' } }, badge(s, st, 'sm'), h('span', { class: 'bold ellipsis' }, s.name), h('span', { class: 'small muted' }, list.length + ' with offers')));
-      if (!list.length) col.appendChild(h('div', { class: 'small dim' }, 'No power conference offers on this roster.'));
+      if (!list.length) col.appendChild(h('div', { class: 'small dim' }, 'No major college offers on this roster.'));
       for (const x of list.slice(0, 8)) {
         const info = Season.recruitInfo(st, x.p, s);
+        const meta = ' ' + x.p.pos + ' · ' + Players.CLASS_NAME[x.p.year] + (info ? ' · #' + info.rank : '');
+        if (x.offers[0].committed) {
+          col.appendChild(h('div', { class: 'gp' }, h('div', { class: 'small', style: { gridColumn: '1 / -1' } }, commitChip(x.offers[0].college, Players.shortName(x.p) + meta, () => openPlayer(st, x.p)))));
+          continue;
+        }
         col.appendChild(h('div', { class: 'gp' },
-          h('div', { class: 'small ellipsis' }, h('button', { type: 'button', class: 'linklike', onclick: () => openPlayer(st, x.p) }, Players.shortName(x.p)), ' ' + x.p.pos + ' · ' + Players.CLASS_NAME[x.p.year] + (info ? ' · #' + info.rank : '')),
+          h('div', { class: 'small ellipsis' }, h('button', { type: 'button', class: 'linklike', onclick: () => openPlayer(st, x.p) }, Players.shortName(x.p)), meta),
           h('div', { class: 'small bold num' }, x.offers.length + ' offer' + (x.offers.length > 1 ? 's' : '')),
           logoStrip(x.offers, 10)));
       }
@@ -127,9 +168,11 @@
         const lastSigned = st.cr ? Object.keys(st.cr.signed).map(Number).sort((a, b) => b - a)[0] : null;
         const signedBy = {};
         if (lastSigned) for (const x of st.cr.signed[lastSigned]) signedBy[x[0]] = (signedBy[x[0]] || 0) + 1;
-        const rows = Colleges.LIST.filter((c) => S.conf === 'all' || c.conf === S.conf).map((c) => ({ c, n: offerCounts(st, c.id) }));
+        const commitsBy = {};
+        for (const pid in (st.cr && st.cr.commits) || {}) commitsBy[st.cr.commits[pid][0]] = (commitsBy[st.cr.commits[pid][0]] || 0) + 1;
+        const rows = Colleges.LIST.filter((c) => S.conf === 'all' || c.conf === S.conf).map((c) => ({ c, n: offerCounts(st, c.id), commits: commitsBy[c.id] || 0 }));
         body.appendChild(h('p', { class: 'muted small', style: { marginTop: 0 } },
-          'Every Big Ten, SEC, ACC and Big 12 program, plus Notre Dame, recruits the players in the game. Offers update every week from each player’s rating, position, statistics, recent games, potential, recruit ranking, level of competition and location. Prestige sets the level a college recruits at and how far it can reach; lower-prestige programs look harder at developing, local and overlooked players.'));
+          'Every college in the game recruits the players already in it, from the power conferences to the American, Mountain West, Sun Belt and Conference USA. Offers update every week from each player’s rating, position, statistics, recent games, potential, recruit ranking, level of competition and location. Prestige sets the level a college recruits at and how far it can reach; lower-prestige programs look harder at developing, local and overlooked players.'));
         body.appendChild(h('div', { class: 'toolbar' },
           seg([{ value: 'all', label: 'All' }].concat(FNG.DATA.conferences.map((c) => ({ value: c.id, label: c.id === 'IND' ? 'Notre Dame' : c.name }))), S.conf, (v) => { S.conf = v; WM.refresh(w.id); }),
           h('div', { class: 'grow' }),
@@ -140,6 +183,7 @@
           { key: 'loc', label: 'Location', value: (r) => r.c.state + r.c.city, defaultDir: 'asc', render: (r) => r.c.city + ', ' + r.c.state, cls: 'muted' },
           { key: 'pres', label: 'Prestige', value: (r) => r.c.prestige, render: (r) => prestigeCell(r.c.prestige) },
           { key: 'tot', label: 'Offers', value: (r) => r.n.total, render: (r) => h('b', { class: 'num' }, r.n.total), cls: 'num r' },
+          { key: 'cm', label: 'Commits', title: 'Players in the game committed to this college', value: (r) => r.commits, render: (r) => (r.commits ? h('b', { class: 'num good-t' }, r.commits) : h('span', { class: 'dim' }, '0')), cls: 'num r' },
         ].concat(years.map((cy) => ({ key: 'c' + cy, label: classTagOf(st, cy), title: 'Offers in the class of ' + cy, value: (r) => r.n[cy] || 0, render: (r) => r.n[cy] || h('span', { class: 'dim' }, '0'), cls: 'num r' })));
         if (lastSigned) cols.push({ key: 'sg', label: 'Signed ’' + String(lastSigned).slice(2), title: 'Players signed from the ' + lastSigned + ' senior class', value: (r) => signedBy[r.c.id] || 0, render: (r) => signedBy[r.c.id] || h('span', { class: 'dim' }, '0'), cls: 'num r' });
         body.appendChild(table(cols, rows, { sortState: S.sort, onSort: () => WM.refresh(w.id), onRow: (r) => Win.college(r.c.id) }));
@@ -165,7 +209,7 @@
             h('span', { class: 'dim num', style: { width: '62px', flex: 'none' } }, offeredWhen(st, r.x[0], r.x[1])),
             collegeLogo(r.c, 'sm'),
             h('span', { class: 'ellipsis' }, h('button', { type: 'button', class: 'linklike', onclick: () => Win.college(r.c.id) }, r.c.name),
-              r.x[4] === 'offer' ? ' offers ' : r.x[4] === 'signed' ? ' signs ' : ' pulls its offer to ',
+              WIRE_VERB[r.x[4]] || ' pulls its offer to ',
               r.f ? h('button', { type: 'button', class: 'linklike', onclick: () => openPlayer(st, r.f.p) }, r.name) : h('b', null, r.name),
               r.where ? h('span', { class: 'muted' }, ' (' + (r.f ? r.f.p.pos + ', ' : '') + r.where.name + ', ' + r.where.state + ')') : null)))));
         }
@@ -195,7 +239,7 @@
         WM.setTitle(w.id, c.name + ' Recruiting');
         const board = Season.collegeBoard(st, id);
         const presRank = Colleges.LIST.filter((x) => x.prestige > c.prestige).length + 1;
-        const homeState = World.STATES.includes(c.state) ? ' · home state in the game' : '';
+        const homeState = Season.states(st).includes(c.state) ? ' · home state in your world' : '';
         body.appendChild(h('div', { class: 'hero', style: { background: 'linear-gradient(115deg, ' + c.colors[0] + 'cc, var(--panel-2) 70%)', borderColor: 'var(--line-2)' } },
           collegeLogo(c, 'lg'),
           h('div', { class: 'grow', style: { position: 'relative', zIndex: 1 } },
@@ -208,9 +252,12 @@
             h('div', { class: 'small', style: { color: 'rgba(255,255,255,.75)' } }, '#' + presRank + ' of ' + Colleges.LIST.length + ' · ' + board.length + ' offers'))));
 
         const signedYears = Object.keys((st.cr && st.cr.signed) || {}).map(Number).sort((a, b) => b - a);
-        body.appendChild(tabs([{ value: 'offers', label: 'Offers (' + board.length + ')' }, { value: 'targets', label: 'Evaluating' }, { value: 'signed', label: 'Signed' }], S.tab, (v) => { S.tab = v; WM.refresh(w.id); }));
+        const commits = board.filter((r) => r.commit && r.commit.college.id === id);
+        body.appendChild(tabs([{ value: 'offers', label: 'Offers (' + board.length + ')' }, { value: 'commits', label: 'Commits (' + commits.length + ')' }, { value: 'targets', label: 'Evaluating' }, { value: 'signed', label: 'Signed' }], S.tab, (v) => { S.tab = v; WM.refresh(w.id); }));
+        // Where each offered player stands: committed here, committed elsewhere, or still open.
+        const statusCol = { key: 'cm', label: 'Status', value: (r) => (r.commit ? (r.commit.college.id === id ? 2 : 1) : 0), render: (r) => (!r.commit ? h('span', { class: 'dim' }, 'Open') : r.commit.college.id === id ? h('span', { class: 'tag good' }, 'Committed') : h('span', { class: 'row nowrap', style: { gap: '4px' }, title: 'Committed to ' + r.commit.college.name }, collegeLogo(r.commit.college, 'sm'), h('span', { class: 'small muted' }, r.commit.college.abbr))) };
 
-        const nameCol = { key: 'n', label: 'Prospect', value: (r) => r.p.last + r.p.first, defaultDir: 'asc', render: (r) => h('button', { type: 'button', class: 'linklike', onclick: () => openPlayer(st, r.p) }, Players.fullName(r.p)) };
+        const nameCol = { key: 'n', label: 'Prospect', value: (r) => r.p.last + r.p.first, defaultDir: 'asc', render: (r) => playerName(st, r.p, Players.fullName(r.p), () => openPlayer(st, r.p)) };
         const schoolCol = { key: 'sch', label: 'School', value: (r) => r.s.name, defaultDir: 'asc', render: (r) => h('div', { class: 'row nowrap', style: { gap: '6px' } }, badge(r.s, st, 'sm'), h('button', { type: 'button', class: 'linklike', onclick: () => Win.school(r.s.id) }, r.s.name), h('span', { class: 'tiny muted' }, r.s.state)) };
         const common = [
           nameCol,
@@ -233,9 +280,18 @@
             h('span', { class: 'small muted' }, rows.length + ' offered players')));
           body.appendChild(table(common.concat([
             { key: 'when', label: 'Offered', value: (r) => r.year * 100 + r.week, render: (r) => offeredWhen(st, r.year, r.week), cls: 'muted' },
+            statusCol,
             { key: 'int', label: 'Interest', value: (r) => r.interest, render: (r) => interestBar(r.interest) },
           ]), rows, { sortState: S.sort, onSort: () => WM.refresh(w.id), rowClass: (r) => (r.s.isUser ? 'me' : ''), empty: c.name + ' has not offered any players in the game yet.' }));
           body.appendChild(h('p', { class: 'help' }, 'Interest is how interested each player is in ' + c.name + ', from its prestige against the player’s own level, home state and distance. Offers to players whose stock falls well below the bar can be pulled.'));
+        } else if (S.tab === 'commits') {
+          const byClass = {};
+          for (const r of commits) byClass[r.m.cy] = (byClass[r.m.cy] || 0) + 1;
+          body.appendChild(h('p', { class: 'small muted', style: { marginTop: 0 } }, commits.length ? 'Players verbally committed to ' + c.name + ': ' + Object.keys(byClass).sort().map((cy) => byClass[cy] + ' in the class of ' + cy).join(', ') + '. They sign at the end of their senior season unless another school flips them.' : 'No players in the game have committed to ' + c.name + ' yet.'));
+          if (commits.length) body.appendChild(table(common.concat([
+            { key: 'when', label: 'Committed', value: (r) => r.commit.year * 100 + r.commit.week, render: (r) => offeredWhen(st, r.commit.year, r.commit.week), cls: 'muted' },
+            { key: 'int', label: 'Interest', value: (r) => r.interest, render: (r) => interestBar(r.interest) },
+          ]), commits, { sortState: S.sort, onSort: () => WM.refresh(w.id), rowClass: (r) => (r.s.isUser ? 'me' : '') }));
         } else if (S.tab === 'targets') {
           const rows = Season.collegeTargets(st, id, 30);
           body.appendChild(h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Ranked prospects ' + c.name + ' is watching but has not offered, closest to an offer first. Better production, development or a rise in the rankings can earn an offer.'));
@@ -265,5 +321,5 @@
     });
   };
 
-  FNG.CollegeView = { logoStrip, offersCell, offersCard, gameOffers, interestBar, offeredWhen };
+  FNG.CollegeView = { logoStrip, offersCell, offersCard, gameOffers, interestBar, offeredWhen, commitBanner, commitChip, playerName };
 })();

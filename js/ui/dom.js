@@ -58,6 +58,7 @@
     news: '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/>',
     staff: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2.8h6V4M8.5 10h7M8.5 14h7M8.5 18h4"/>',
     star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+    alumni: '<circle cx="12" cy="7" r="3.5"/><path d="M5 21c.8-4 3.6-6.5 7-6.5s6.2 2.5 7 6.5"/><path d="M8.5 14.8L12 18l3.5-3.2"/>',
     college: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c1.5 1.6 3.7 2.5 6 2.5s4.5-.9 6-2.5v-5"/><path d="M22 9v6"/>',
   };
 
@@ -90,40 +91,30 @@
     return h('span', { class: 'sbadge' + (size ? ' ' + size : ''), style, title: s.name }, txt);
   }
 
-  /*
-   * College logos load from img/colleges/<id>.png (then .svg, .webp, .jpg). Until a file loads, or
-   * when none exists, the college shows a badge in its colors. Each college is looked up once.
-   */
-  const LOGO_EXT = ['png', 'svg', 'webp', 'jpg'];
-  const logoSrc = {};
-  const logoProbe = {};
-  function findLogo(c) {
-    if (!logoProbe[c.id]) {
-      logoProbe[c.id] = new Promise((resolve) => {
-        let i = 0;
-        const img = new Image();
-        img.onload = () => resolve(c.logo + '.' + LOGO_EXT[i]);
-        img.onerror = () => {
-          i++;
-          if (i < LOGO_EXT.length) img.src = c.logo + '.' + LOGO_EXT[i];
-          else resolve(null);
-        };
-        img.src = c.logo + '.' + LOGO_EXT[0];
-      }).then((src) => (logoSrc[c.id] = src));
-    }
-    return logoProbe[c.id];
+  // Text color that reads on a background color, and a darker shade of a color (for gradients).
+  function hexRgb(hex) {
+    const c = hex.replace('#', '');
+    const v = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
+    return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16));
   }
+  function inkFor(hex) {
+    const lum = hexRgb(hex).map((x) => x / 255).map((x) => (x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)));
+    return 0.2126 * lum[0] + 0.7152 * lum[1] + 0.0722 * lum[2] > 0.42 ? '#0b1220' : '#ffffff';
+  }
+  function shade(hex, f) {
+    return '#' + hexRgb(hex).map((x) => Math.round(x * (1 - f)).toString(16).padStart(2, '0')).join('');
+  }
+
+  // College logo from assets/colleges/. If the file can't load, the college's colors and abbreviation stand in.
   function collegeLogo(c, size) {
-    const el = h('span', { class: 'clogo' + (size ? ' ' + size : ''), title: c.name, style: { background: c.colors[0], color: c.colors[1], borderColor: c.colors[1] } }, h('span', { class: 'ab' + (c.abbr.length >= 4 ? ' long' : '') }, c.abbr));
-    const show = (src) => {
-      if (!src) return;
-      el.replaceChildren(h('img', { src, alt: c.name, draggable: 'false' }));
-      el.classList.add('img');
-      el.style.background = '';
-      el.style.borderColor = '';
-    };
-    if (c.id in logoSrc) show(logoSrc[c.id]);
-    else findLogo(c).then(show);
+    const el = h('span', { class: 'clogo img' + (size ? ' ' + size : ''), title: c.name });
+    const img = h('img', { src: c.logo, alt: c.name, draggable: 'false', loading: 'lazy' });
+    img.addEventListener('error', () => {
+      el.classList.remove('img');
+      Object.assign(el.style, { background: c.colors[0], color: c.colors[1], borderColor: c.colors[1] });
+      el.replaceChildren(h('span', { class: 'ab' + (c.abbr.length >= 4 ? ' long' : '') }, c.abbr));
+    });
+    el.appendChild(img);
     return el;
   }
 
@@ -258,5 +249,5 @@
     return rec.w + '-' + rec.l;
   }
 
-  FNG.UI = { h, append, icon, badge, collegeLogo, schoolColors, ovrChip, ratingClass, attrBar, stars, stat, seg, tabs, select, table, toast, busy, recordStr, PALETTE };
+  FNG.UI = { h, append, icon, badge, collegeLogo, inkFor, shade, schoolColors, ovrChip, ratingClass, attrBar, stars, stat, seg, tabs, select, table, toast, busy, recordStr, PALETTE };
 })();

@@ -203,4 +203,23 @@ Signal Mountain|Hamilton|8800|35.12|-85.35
     metros: METROS,
     cities,
   };
+
+  // Division I public classes 6A..1A are divisions 1-6; Division II privates AAA..A are 7-9.
+  const DII = ['AAA', 'AA', 'A'];
+  FNG.States.register({
+    key: 'TN',
+    name: 'Tennessee',
+    assoc: 'TSSAA',
+    data: FNG.DATA.tennessee,
+    generator: 'tennessee',
+    classes: { count: 9, method: 'tennessee' },
+    labels: {
+      long: (d) => (d >= 7 ? 'Division II-' + DII[d - 7] : 'Class ' + (7 - d) + 'A'),
+      short: (d) => (d >= 7 ? 'II-' + DII[d - 7] : 7 - d + 'A'),
+    },
+    leagues: { style: 'districts', word: 'Region', prefix: 'T', plan: 'TN' },
+    talent: -0.9,
+    depth: 0,
+    neighbors: ['KY', 'VA', 'NC', 'GA', 'AL', 'MS', 'AR', 'MO'],
+  });
 })();

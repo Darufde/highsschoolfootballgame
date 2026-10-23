@@ -9,6 +9,8 @@
   const Win = FNG.Win;
 
   const SAVE_KEY = 'fng.save.v1';
+  // Saves in browser storage are compressed (FNG.lzCompress) behind this prefix; older saves are plain JSON.
+  const LZ_PREFIX = 'LZ1:';
 
   const APPS = [
     { id: 'hub', label: 'Hub', icon: 'hub' },
@@ -20,6 +22,7 @@
     { id: 'rankings', label: 'Team Rankings', icon: 'rankings' },
     { id: 'recruits', label: 'Recruits', icon: 'star' },
     { id: 'colleges', label: 'Colleges', icon: 'college' },
+    { id: 'alumni', label: 'Alumni', icon: 'alumni' },
     { id: 'playoffs', label: 'Playoffs', icon: 'playoffs' },
     { id: 'schools', label: 'Schools', icon: 'schools' },
     { id: 'program', label: 'Facilities', icon: 'program' },
@@ -39,7 +42,7 @@
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return null;
-      const s = JSON.parse(raw);
+      const s = JSON.parse(raw.startsWith(LZ_PREFIX) ? FNG.lzDecompress(raw.slice(LZ_PREFIX.length)) : raw);
       return valid(s) ? s : null;
     } catch (e) {
       return null;
@@ -47,7 +50,7 @@
   }
 
   function valid(s) {
-    return s && (s.version === Season.SAVE_VERSION || s.version === 2 || s.version === 3) && Array.isArray(s.schools) && Array.isArray(s.roster) && s.userId;
+    return s && (s.version >= 2 && s.version <= Season.SAVE_VERSION) && Array.isArray(s.schools) && Array.isArray(s.roster) && s.userId;
   }
 
   // A save from an earlier version of the game that can no longer be loaded.
@@ -64,7 +67,9 @@
     if (!App.state) return false;
     try {
       App.state.savedAt = Date.now();
-      localStorage.setItem(SAVE_KEY, JSON.stringify(App.state));
+      localStorage.setItem(SAVE_KEY, LZ_PREFIX + FNG.lzCompress(JSON.stringify(App.state)));
+      lastSave = Date.now();
+      dirty = false;
       if (!quiet) toast('Game saved.', 'good', 1800);
       return true;
     } catch (e) {
@@ -220,8 +225,35 @@
     WM.refreshAll();
     renderTopbar();
     const st = App.state;
-    if (st && st.settings.autoSave) App.save(true);
+    if (st && st.settings.autoSave) {
+      dirty = true;
+      scheduleAutoSave();
+    }
   };
+  /*
+   * Autosave writes the whole world, which takes a moment with thousands of schools, so it runs
+   * at most once every AUTOSAVE_MS while you play (just after the screen repaints), and right away
+   * when the page is hidden or closed. Save Game and Ctrl+S always save immediately.
+   */
+  const AUTOSAVE_MS = 30000;
+  let autoSaveTimer = null;
+  let lastSave = 0;
+  let dirty = false;
+  function scheduleAutoSave() {
+    if (autoSaveTimer) return;
+    const wait = Math.max(60, lastSave + AUTOSAVE_MS - Date.now());
+    autoSaveTimer = setTimeout(() => {
+      autoSaveTimer = null;
+      if (App.state && dirty) App.save(true);
+    }, wait);
+  }
+  function flushSave() {
+    if (App.state && dirty) App.save(true);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushSave();
+  });
+  window.addEventListener('pagehide', flushSave);
 
   App.home = function () {
     if (App.state) Win.hub();
@@ -288,8 +320,8 @@
 
   function afterWeek(st, week) {
     const us = Season.user(st).state;
-    if (week === 10 && st.phase === 'playoffs' && us !== 'OH') {
-      toast('Regular season complete. ' + FNG.World.stateName(us) + '\u2019s ' + (us === 'KY' ? 'KHSAA' : 'TSSAA') + ' playoffs are not in the game yet.', 'warn', 6000);
+    if (week === 10 && st.phase === 'playoffs' && !FNG.World.hasPlayoffs(us)) {
+      toast('Regular season complete. ' + FNG.World.stateName(us) + '\u2019s ' + FNG.World.assoc(us) + ' playoffs are not in the game yet.', 'warn', 6000);
     } else if (week === 10 && st.phase === 'playoffs') {
       const u = Season.user(st);
       toast(u.rec.seed ? 'Playoffs! ' + u.name + ' is the No. ' + u.rec.seed + ' seed in Region ' + u.region + '.' : u.name + ' missed the playoffs.', u.rec.seed ? 'good' : 'warn', 6000);

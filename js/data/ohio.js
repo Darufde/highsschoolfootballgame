@@ -559,7 +559,24 @@ Carey|Wyandot|3600|40.95|-83.38
     rivers,
   };
 
-  // The state picker shows every state; Ohio, Kentucky and Tennessee are playable.
+  FNG.States.register({
+    key: 'OH',
+    name: 'Ohio',
+    assoc: 'OHSAA',
+    data: FNG.DATA.ohio,
+    generator: 'places',
+    seedTag: '',
+    classes: { count: 7, method: 'ohio' },
+    labels: 'roman',
+    leagues: { style: 'conferences', word: 'League', prefix: 'L', catholicMaxDiv: 4 },
+    regions: true,
+    playoffs: 'ohio',
+    talent: 0,
+    depth: 0.4,
+    neighbors: ['MI', 'IN', 'KY', 'WV', 'PA'],
+  });
+
+  // The state picker shows every state; the ones with a registered data module are playable.
   FNG.DATA.states = [
     ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'],
     ['CT', 'Connecticut'], ['DE', 'Delaware'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'],
@@ -571,5 +588,11 @@ Carey|Wyandot|3600|40.95|-83.38
     ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'],
     ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'],
     ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
-  ].map(([abbr, name]) => ({ abbr, name, playable: abbr === 'OH' || abbr === 'KY' || abbr === 'TN' }));
+  ].map(([abbr, name]) => ({
+    abbr,
+    name,
+    get playable() {
+      return FNG.States.has(abbr);
+    },
+  }));
 })();

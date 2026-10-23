@@ -1,10 +1,12 @@
 /*
- * Power conference colleges (Big Ten, SEC, ACC, Big 12) plus Notre Dame.
+ * Colleges that recruit in the game: the Big Ten, SEC, ACC, Big 12, Pac-12, American and Mountain West programs plus Notre
+ * Dame, limited to the schools with a logo in assets/colleges/ (a college without a logo is not
+ * in the game).
  *
- * Each college has a fixed id that is also the name of its logo file (img/colleges/<id>.png,
- * falling back to .svg), a campus location for recruiting distance, colors for the fallback
- * badge, and a prestige rating (0-100) that sets which recruits it targets and how interested
- * top players are in it.
+ * Each college has a fixed id that is also the name of its logo file (assets/colleges/<id>.png),
+ * a campus location for recruiting distance, colors for the badge shown if the logo can't load,
+ * and a prestige rating (0-100) that sets which recruits it targets and how interested top
+ * players are in it.
  */
 (function () {
   'use strict';
@@ -16,6 +18,11 @@
     { id: 'SEC', name: 'SEC' },
     { id: 'ACC', name: 'ACC' },
     { id: 'B12', name: 'Big 12' },
+    { id: 'P12', name: 'Pac-12' },
+    { id: 'AAC', name: 'American' },
+    { id: 'MW', name: 'Mountain West' },
+    { id: 'SBC', name: 'Sun Belt' },
+    { id: 'CUSA', name: 'Conference USA' },
     { id: 'IND', name: 'Independent' },
   ];
 
@@ -42,13 +49,13 @@ northwestern|Northwestern|NU|B1G|Evanston|IL|42.06|-87.68|#4E2A84|#FFFFFF|50
 alabama|Alabama|ALA|SEC|Tuscaloosa|AL|33.21|-87.55|#9E1B32|#FFFFFF|96
 georgia|Georgia|UGA|SEC|Athens|GA|33.95|-83.37|#BA0C2F|#000000|96
 texas|Texas|TEX|SEC|Austin|TX|30.28|-97.73|#BF5700|#FFFFFF|93
-lsu|LSU|LSU|SEC|Baton Rouge|LA|30.41|-91.18|#461D7C|#FDD023|89
 oklahoma|Oklahoma|OU|SEC|Norman|OK|35.21|-97.44|#841617|#FDF9D8|86
 tennessee|Tennessee|TENN|SEC|Knoxville|TN|35.95|-83.93|#FF8200|#FFFFFF|85
 texas-am|Texas A&M|TAMU|SEC|College Station|TX|30.61|-96.34|#500000|#FFFFFF|85
 florida|Florida|UF|SEC|Gainesville|FL|29.65|-82.35|#0021A5|#FA4616|84
-ole-miss|Ole Miss|MISS|SEC|Oxford|MS|34.36|-89.54|#CE1126|#14213D|82
+lsu|LSU|LSU|SEC|Baton Rouge|LA|30.41|-91.18|#461D7C|#FDD023|89
 auburn|Auburn|AUB|SEC|Auburn|AL|32.60|-85.49|#0C2340|#E87722|81
+ole-miss|Ole Miss|MISS|SEC|Oxford|MS|34.36|-89.54|#CE1126|#14213D|82
 south-carolina|South Carolina|SC|SEC|Columbia|SC|34.00|-81.03|#73000A|#000000|74
 missouri|Missouri|MIZ|SEC|Columbia|MO|38.94|-92.33|#F1B82D|#000000|72
 arkansas|Arkansas|ARK|SEC|Fayetteville|AR|36.07|-94.17|#9D2235|#FFFFFF|65
@@ -88,12 +95,57 @@ arizona|Arizona|ARIZ|B12|Tucson|AZ|32.23|-110.95|#CC0033|#003366|58
 ucf|UCF|UCF|B12|Orlando|FL|28.60|-81.20|#000000|#BA9B37|58
 houston|Houston|HOU|B12|Houston|TX|29.72|-95.34|#C8102E|#FFFFFF|56
 kansas|Kansas|KU|B12|Lawrence|KS|38.95|-95.25|#0051BA|#E8000D|55
+boise-state|Boise State|BSU|P12|Boise|ID|43.60|-116.20|#0033A0|#D64309|70
+oregon-state|Oregon State|ORST|P12|Corvallis|OR|44.56|-123.28|#DC4405|#000000|56
+washington-state|Washington State|WSU|P12|Pullman|WA|46.73|-117.16|#981E32|#5E6A71|55
+fresno-state|Fresno State|FRES|P12|Fresno|CA|36.81|-119.75|#DB0032|#002E6D|52
+texas-state|Texas State|TXST|P12|San Marcos|TX|29.89|-97.94|#501214|#8D734A|50
+san-diego-state|San Diego State|SDSU|P12|San Diego|CA|32.78|-117.07|#A6192E|#000000|50
+utah-state|Utah State|USU|P12|Logan|UT|41.75|-111.81|#0F2439|#8A8D8F|48
+colorado-state|Colorado State|CSU|P12|Fort Collins|CO|40.57|-105.08|#1E4D2B|#C8C372|47
+tulane|Tulane|TUL|AAC|New Orleans|LA|29.94|-90.12|#006747|#418FDE|62
+memphis|Memphis|MEM|AAC|Memphis|TN|35.12|-89.94|#003087|#898D8D|60
+army|Army|ARMY|AAC|West Point|NY|41.39|-73.96|#000000|#D3BC8D|55
+navy|Navy|NAVY|AAC|Annapolis|MD|38.98|-76.49|#00205B|#C5B783|55
+utsa|UTSA|UTSA|AAC|San Antonio|TX|29.58|-98.62|#0C2340|#F15A22|52
+usf|USF|USF|AAC|Tampa|FL|28.06|-82.41|#006747|#CFC493|52
+east-carolina|East Carolina|ECU|AAC|Greenville|NC|35.61|-77.37|#592A8A|#FDC82F|50
+north-texas|North Texas|UNT|AAC|Denton|TX|33.21|-97.15|#00853E|#FFFFFF|50
+uab|UAB|UAB|AAC|Birmingham|AL|33.50|-86.80|#1E6B52|#F4C300|45
+fau|FAU|FAU|AAC|Boca Raton|FL|26.37|-80.10|#003366|#CC0000|43
+tulsa|Tulsa|TLSA|AAC|Tulsa|OK|36.15|-95.94|#002D72|#C8102E|43
+rice|Rice|RICE|AAC|Houston|TX|29.72|-95.40|#00205B|#C1C6C8|42
+temple|Temple|TEM|AAC|Philadelphia|PA|39.98|-75.16|#9D2235|#FFFFFF|40
+charlotte|Charlotte|CLT|AAC|Charlotte|NC|35.31|-80.74|#005035|#A49665|38
+unlv|UNLV|UNLV|MW|Las Vegas|NV|36.11|-115.14|#CF0A2C|#666666|52
+air-force|Air Force|AF|MW|Colorado Springs|CO|38.99|-104.86|#003087|#8A8D8F|52
+northern-illinois|Northern Illinois|NIU|MW|DeKalb|IL|41.93|-88.77|#BA0C2F|#000000|50
+wyoming|Wyoming|WYO|MW|Laramie|WY|41.31|-105.58|#492F24|#FFC425|48
+san-jose-state|San José State|SJSU|MW|San Jose|CA|37.34|-121.88|#0055A2|#E5A823|47
+hawaii|Hawaii|HAW|MW|Honolulu|HI|21.30|-157.82|#024731|#FFFFFF|45
+nevada|Nevada|NEV|MW|Reno|NV|39.54|-119.82|#003366|#807F84|42
+new-mexico|New Mexico|UNM|MW|Albuquerque|NM|35.08|-106.62|#BA0C2F|#63666A|40
+utep|UTEP|UTEP|MW|El Paso|TX|31.77|-106.50|#041E42|#FF8200|40
+james-madison|James Madison|JMU|SBC|Harrisonburg|VA|38.43|-78.87|#450084|#CBB677|54
+appalachian-state|App State|APP|SBC|Boone|NC|36.21|-81.68|#222222|#FFCC00|52
+marshall|Marshall|MRSH|SBC|Huntington|WV|38.42|-82.42|#00B140|#A2AAAD|47
+troy|Troy|TROY|SBC|Troy|AL|31.80|-85.96|#8A2432|#B3B5B8|46
+louisiana|Louisiana|UL|SBC|Lafayette|LA|30.21|-92.02|#CE181E|#0A0A0A|46
+coastal-carolina|Coastal Carolina|CCU|SBC|Conway|SC|33.79|-79.01|#006F71|#A27752|45
+georgia-southern|Georgia Southern|GASO|SBC|Statesboro|GA|32.42|-81.78|#011E41|#A3AAAE|44
+south-alabama|South Alabama|USA|SBC|Mobile|AL|30.70|-88.18|#00205B|#BF0D3E|44
+southern-miss|Southern Miss|USM|SBC|Hattiesburg|MS|31.33|-89.33|#000000|#FFAB00|42
+arkansas-state|Arkansas State|ARST|SBC|Jonesboro|AR|35.84|-90.68|#CC092F|#000000|40
+old-dominion|Old Dominion|ODU|SBC|Norfolk|VA|36.89|-76.31|#003865|#7C878E|40
+georgia-state|Georgia State|GAST|SBC|Atlanta|GA|33.75|-84.39|#0039A6|#C60C30|38
+louisiana-monroe|UL Monroe|ULM|SBC|Monroe|LA|32.53|-92.07|#840029|#BA9B37|32
+louisiana-tech|Louisiana Tech|LT|CUSA|Ruston|LA|32.53|-92.65|#002F8B|#E31B23|40
 notre-dame|Notre Dame|ND|IND|Notre Dame|IN|41.70|-86.24|#0C2340|#C99700|92
 `;
 
   const colleges = RAW.trim().split('\n').map((line) => {
     const [id, name, abbr, conf, city, state, lat, lon, c1, c2, prestige] = line.split('|');
-    return { id, name, abbr, conf, city, state, lat: Number(lat), lon: Number(lon), colors: [c1, c2], prestige: Number(prestige), logo: 'img/colleges/' + id };
+    return { id, name, abbr, conf, city, state, lat: Number(lat), lon: Number(lon), colors: [c1, c2], prestige: Number(prestige), logo: 'assets/colleges/' + id + '.png' };
   });
 
   FNG.DATA.conferences = CONFERENCES;
