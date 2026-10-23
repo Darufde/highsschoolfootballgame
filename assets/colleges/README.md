@@ -102,6 +102,25 @@ The files are WebP images with a `.png` name, which every modern browser display
 | Utah State | `utah-state.png` |
 | Washington State | `washington-state.png` |
 
+## American
+
+| College | File |
+| --- | --- |
+| Army | `army.png` |
+| Charlotte | `charlotte.png` |
+| East Carolina | `east-carolina.png` |
+| FAU | `fau.png` |
+| Memphis | `memphis.png` |
+| Navy | `navy.png` |
+| North Texas | `north-texas.png` |
+| Rice | `rice.png` |
+| Temple | `temple.png` |
+| Tulane | `tulane.png` |
+| Tulsa | `tulsa.png` |
+| UAB | `uab.png` |
+| USF | `usf.png` |
+| UTSA | `utsa.png` |
+
 ## Independent
 
 | College | File |

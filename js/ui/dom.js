@@ -58,6 +58,7 @@
     news: '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/>',
     staff: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2.8h6V4M8.5 10h7M8.5 14h7M8.5 18h4"/>',
     star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+    alumni: '<circle cx="12" cy="7" r="3.5"/><path d="M5 21c.8-4 3.6-6.5 7-6.5s6.2 2.5 7 6.5"/><path d="M8.5 14.8L12 18l3.5-3.2"/>',
     college: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c1.5 1.6 3.7 2.5 6 2.5s4.5-.9 6-2.5v-5"/><path d="M22 9v6"/>',
   };
 

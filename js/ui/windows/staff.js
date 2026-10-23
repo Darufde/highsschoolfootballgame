@@ -39,7 +39,7 @@
           body.appendChild(h('h3', { class: 'sect mt' }, group));
           body.appendChild(table([
             { key: 'role', label: 'Role', render: (r) => h('div', null, h('div', { class: 'bold' }, r.title), h('div', { class: 'tiny muted', style: { whiteSpace: 'normal', maxWidth: '260px' } }, r.desc)) },
-            { key: 'coach', label: 'Coach', render: (r) => { const c = st.staff[r.id]; return c ? h('div', null, c.first + ' ' + c.last, h('div', { class: 'tiny muted' }, 'Age ' + c.age + ' · ' + (c.years ? c.years + ' yr' + (c.years > 1 ? 's' : '') + ' on staff' : 'New hire'))) : h('span', { class: 'tag bad' }, 'Vacant'); } },
+            { key: 'coach', label: 'Coach', render: (r) => { const c = st.staff[r.id]; return c ? h('div', null, h('span', { class: 'row nowrap', style: { gap: '6px' } }, c.first + ' ' + c.last, c.alumId ? h('button', { type: 'button', class: 'tag team', style: { border: 0, cursor: 'pointer' }, title: 'One of your former players', onclick: () => Win.alumnus(c.alumId) }, 'Alumnus') : null), h('div', { class: 'tiny muted' }, 'Age ' + c.age + ' · ' + (c.years ? c.years + ' yr' + (c.years > 1 ? 's' : '') + ' on staff' : 'New hire'))) : h('span', { class: 'tag bad' }, 'Vacant'); } },
             { key: 'teach', label: 'Teaching', render: (r) => (st.staff[r.id] ? ovrChip(st.staff[r.id].teach) : '—'), cls: 'c' },
             { key: 'tac', label: 'Game Day', render: (r) => (st.staff[r.id] ? ovrChip(st.staff[r.id].tactics) : '—'), cls: 'c' },
             { key: 'scheme', label: 'Scheme', render: (r) => (st.staff[r.id] && st.staff[r.id].scheme ? h('span', { class: 'tag info', title: (Coaches.OFF_SCHEMES[st.staff[r.id].scheme] || Coaches.DEF_SCHEMES[st.staff[r.id].scheme]).desc }, st.staff[r.id].scheme) : '') },
@@ -77,7 +77,7 @@
               App.changed();
             } }, 'New Candidates · ' + U.money(REFRESH_COST)))));
         body.appendChild(table([
-          { key: 'n', label: 'Candidate', render: (c) => h('div', null, h('div', { class: 'bold' }, c.first + ' ' + c.last), h('div', { class: 'tiny muted' }, 'Age ' + c.age)) },
+          { key: 'n', label: 'Candidate', render: (c) => { const a = c.alumId && Season.alumnus(st, c.alumId); return h('div', null, h('div', { class: 'row nowrap', style: { gap: '6px' } }, h('span', { class: 'bold' }, c.first + ' ' + c.last), a ? h('span', { class: 'tag team', title: 'Played for you' }, 'Alumnus') : null), h('div', { class: 'tiny muted' }, 'Age ' + c.age + (a ? ' · ' + a.pos + ', class of ' + a.grad + ', played at ' + FNG.Alumni.collegeName(a) : ''))); } },
           { key: 't', label: 'Teaching', render: (c) => ovrChip(c.teach), cls: 'c' },
           { key: 'g', label: 'Game Day', render: (c) => ovrChip(c.tactics), cls: 'c' },
           { key: 'o', label: 'Overall', render: (c) => ovrChip(Coaches.ovr(c)), cls: 'c' },
@@ -95,7 +95,7 @@
               }
             } }, cost ? 'Hire · ' + U.money(cost) : 'Hire');
           } },
-        ], list, { empty: 'No candidates available.' }));
+        ], list, { empty: 'No candidates available.', rowClass: (c) => (c.alumId ? 'me' : '') }));
         body.appendChild(h('p', { class: 'help' }, R.desc));
       },
     });

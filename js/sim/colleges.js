@@ -48,6 +48,16 @@
   const MUST_HAVE = 8; // a player this far above the bar gets an offer even if the position is full...
   const OVERFLOW = 2; // ...up to this many extra offers at the position
   const NO_CHANCE = 28;
+  // Commitments: weekly chance by class (seniors, juniors, sophomores, freshmen) at the start and
+  // end of the season, how much better another offer must look to flip a commit, and the weekly
+  // chance a committed player flips when it does.
+  const COMMIT_START = [0.03, 0.012, 0.004, 0.001];
+  const COMMIT_END = [0.18, 0.05, 0.01, 0.002];
+  const COMMIT_STARS = [1.2, 1.2, 1.2, 1.1, 0.8, 0.5];
+  const FLIP_GAP = 12;
+  const FLIP_CHANCE = 0.08;
+  // A college stops offering at a position once it holds about one commit per this many offer slots.
+  const COMMITS_PER_SLOT = 10;
   const SIGNED_YEARS = 6;
   const WIRE = 80;
 
@@ -56,7 +66,7 @@
   }
 
   function init() {
-    return { offers: {}, meta: {}, signed: {}, wire: [], off: {} };
+    return { offers: {}, meta: {}, commits: {}, signed: {}, wire: [], off: {} };
   }
 
   // The rating a college typically recruits at.
@@ -148,6 +158,14 @@
   }
   const NOISE_MAX = 2.449 * 1.3;
 
+  // A stable roll in [0, 1) for one player and one decision (commit week, flip week).
+  function roll(m, salt) {
+    let x = (Math.imul(m.h, 2654435761) ^ FNG.hashString(salt)) >>> 0;
+    x = Math.imul(x ^ (x >>> 15), 2246822507);
+    x = Math.imul(x ^ (x >>> 13), 3266489909);
+    return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+  }
+
   // The prestige level a player expects from his suitors.
   function preferred(m) {
     return U.clamp(50 + (m.proj - 64) * 3.2, 20, 92);
@@ -194,6 +212,7 @@
    */
   function update(cr, pool, ctx) {
     if (!cr.meta) cr.meta = {};
+    if (!cr.commits) cr.commits = {};
     const ms = pool.filter((x) => x.sc + (cr.off[x.cy] || 0) >= POOL_MIN).map((x) => prepare(metrics(x.p, x.s, x.sc, x.cy, ctx.year, ctx.rankOf(x.p.id), ctx.perf[x.p.id], cr.off, ctx.sosMean)));
     ms.sort((a, b) => b.ub - a.ub);
     for (const m of ms) {
@@ -210,6 +229,17 @@
     for (const m of ms) {
       byPid[m.p.id] = m;
       m.kpos = m.cy + '|' + m.p.pos;
+      const cm = cr.commits[m.p.id];
+      m.commit = cm && BY_ID[cm[0]] ? BY_ID[cm[0]] : null;
+      m.commitInterest = m.commit ? interest(m.commit, m) : 0;
+    }
+    // Commitments per college, class and position: a college stops recruiting a position it has filled.
+    const committed = {};
+    for (const c of LIST) committed[c.id] = {};
+    for (const pid in cr.commits) {
+      const key = byPid[pid] ? byPid[pid].kpos : cr.meta[pid] ? cr.meta[pid][0] + '|' + cr.meta[pid][1] : null;
+      const cid = cr.commits[pid][0];
+      if (key && committed[cid]) committed[cid][key] = (committed[cid][key] || 0) + 1;
     }
     // Offer counts per college, then class and position (players outside the pool still count).
     const counts = {};
@@ -267,7 +297,8 @@
         const base = cands[i + 1];
         const k = m.kpos;
         if (m.held !== null && m.held[c.i] === 1) {
-          if (finish(c, m, base) < WITHDRAW_AT) {
+          // A college never pulls the offer of a player committed to it.
+          if (m.commit !== c && finish(c, m, base) < WITHDRAW_AT) {
             const list = cr.offers[m.p.id];
             list.splice(list.findIndex((o) => o[0] === c.id), 1);
             mine[k]--;
@@ -280,6 +311,9 @@
         // Five-stars get offers even when the position is already well stocked.
         const elite = m.rank > 0 && m.stars === 5;
         if (have >= slots + OVERFLOW + (elite ? 2 : 0)) continue;
+        // Committed players only hear from schools above their commitment, trying to flip them.
+        if (m.commit && c.prestige <= m.commit.prestige) continue;
+        if (!elite && (committed[c.id][k] || 0) >= Math.max(1, Math.round(slots / COMMITS_PER_SLOT))) continue;
         if (!elite && base + 3 + NOISE_MAX < (4 * have) / slots) continue;
         const e = finish(c, m, base);
         if (e < 0) continue;
@@ -287,11 +321,36 @@
         if (m.rel[c.i] !== 2 && interest(c, m) < NO_CHANCE) continue;
         if (!elite && e - (4 * have) / slots < 0) continue;
         if (have >= slots && e < MUST_HAVE && !elite) continue;
+        if (m.commit && interest(c, m) < m.commitInterest + FLIP_GAP) continue;
         const entry = cr.offers[m.p.id] || (cr.offers[m.p.id] = []);
         entry.push([c.id, ctx.year, ctx.week]);
         mine[k] = have + 1;
         events.push({ cid: c.id, pid: m.p.id, kind: 'offer' });
       }
+    }
+    // Commitments: players with offers commit to the school they like best, more often as the season
+    // goes on and the older they are; committed players flip when a clearly better offer comes along.
+    const progress = U.clamp(ctx.progress, 0, 1);
+    for (const m of ms) {
+      if (!cr.offers[m.p.id]) continue;
+      const tag = m.p.id + '|' + ctx.year + '|' + ctx.week;
+      const offers = offersFor(cr, m);
+      if (!offers.length) continue;
+      if (m.commit) {
+        const better = offers.find((o) => o.college !== m.commit && o.interest >= m.commitInterest + FLIP_GAP);
+        if (better && roll(m, 'flip|' + tag) < FLIP_CHANCE) {
+          events.push({ cid: m.commit.id, pid: m.p.id, kind: 'decommit' });
+          cr.commits[m.p.id] = [better.college.id, ctx.year, ctx.week];
+          events.push({ cid: better.college.id, pid: m.p.id, kind: 'commit' });
+        }
+        continue;
+      }
+      const lead = offers[0];
+      const chance = (COMMIT_START[m.cls] + (COMMIT_END[m.cls] - COMMIT_START[m.cls]) * progress) * COMMIT_STARS[m.rank ? m.stars : 0] * Math.pow(U.clamp(lead.interest / 65, 0.4, 1.6), 2);
+      if (roll(m, 'commit|' + tag) >= chance) continue;
+      const pick = choose(cr, m);
+      cr.commits[m.p.id] = [pick.college.id, ctx.year, ctx.week];
+      events.push({ cid: pick.college.id, pid: m.p.id, kind: 'commit' });
     }
     // Remember class and position so offers to players who leave the pool keep counting against needs.
     for (const pid in cr.offers) {
@@ -299,6 +358,7 @@
       else if (byPid[pid]) cr.meta[pid] = [byPid[pid].cy, byPid[pid].p.pos];
     }
     for (const pid in cr.meta) if (!cr.offers[pid]) delete cr.meta[pid];
+    for (const pid in cr.commits) if (!cr.offers[pid]) delete cr.commits[pid];
     cr.wire = events.slice(-WIRE).reverse().map((ev) => [ctx.year, ctx.week, ev.cid, ev.pid, ev.kind]).concat(cr.wire).slice(0, WIRE);
     return events;
   }
@@ -357,7 +417,8 @@
     const out = {};
     const signed = (cr.signed[year] = []);
     for (const { m, name } of seniors) {
-      const pick = choose(cr, m);
+      const cm = cr.commits && cr.commits[m.p.id];
+      const pick = (cm && offersFor(cr, m).find((o) => o.college.id === cm[0])) || choose(cr, m);
       if (pick) {
         out[m.p.id] = pick;
         signed.push([pick.college.id, m.p.id, name, m.p.pos, m.s.id, m.stars, m.rank, Math.round(m.sc * 10) / 10, (cr.offers[m.p.id] || []).length]);
@@ -365,10 +426,17 @@
       }
       delete cr.offers[m.p.id];
       delete cr.meta[m.p.id];
+      if (cr.commits) delete cr.commits[m.p.id];
     }
     if (cr.wire.length > WIRE) cr.wire.length = WIRE;
     for (const y in cr.signed) if (Number(y) <= year - SIGNED_YEARS) delete cr.signed[y];
     return out;
+  }
+
+  // A player's commitment: { college, year, week } or null.
+  function commitOf(cr, pid) {
+    const cm = cr.commits && cr.commits[pid];
+    return cm && BY_ID[cm[0]] ? { college: BY_ID[cm[0]], year: cm[1], week: cm[2] } : null;
   }
 
   // Every current offer from one college: [{ pid, year, week }].
@@ -384,6 +452,6 @@
 
   FNG.Colleges = {
     LIST, POOL_MIN, NEIGHBORS, get, init, band, reach, relation, metrics, value, interest, interestLabel, evaluate,
-    update, offsets, offersFor, suitors, sign, offersBy, confName, share, slotsFor,
+    update, offsets, offersFor, suitors, sign, offersBy, commitOf, confName, share, slotsFor,
   };
 })();

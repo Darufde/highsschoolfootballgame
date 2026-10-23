@@ -29,7 +29,7 @@
 
   // Programs below the power conferences. Power conference offers come from FNG.Colleges.
   const COLLEGES = {
-    4: ['Toledo', 'Bowling Green', 'Kent State', 'Akron', 'Ohio', 'Miami (OH)', 'Marshall', 'Western Kentucky', 'Ball State', 'Central Michigan', 'Eastern Michigan', 'Buffalo', 'Memphis', 'Middle Tennessee'],
+    4: ['Toledo', 'Bowling Green', 'Kent State', 'Akron', 'Ohio', 'Miami (OH)', 'Marshall', 'Western Kentucky', 'Ball State', 'Central Michigan', 'Eastern Michigan', 'Buffalo', 'Middle Tennessee', 'Western Michigan'],
     3: ['Youngstown State', 'Dayton', 'Eastern Kentucky', 'Murray State', 'Morehead State', 'Austin Peay', 'Eastern Illinois', 'Southeast Missouri', 'Duquesne', 'Robert Morris', 'Chattanooga', 'East Tennessee State', 'Tennessee Tech', 'UT Martin', 'Tennessee State'],
     2: ['Ashland', 'Findlay', 'Tiffin', 'Walsh', 'Kentucky Wesleyan', 'Lake Erie', 'Ohio Dominican', 'Hillsdale', 'Grand Valley State', 'Kentucky State', 'Central State', 'Carson-Newman', 'Tusculum', 'Lincoln Memorial'],
     1: ['Mount Union', 'Wittenberg', 'Ohio Wesleyan', 'Denison', 'Kenyon', 'Capital', 'Otterbein', 'Heidelberg', 'Baldwin Wallace', 'Marietta', 'Muskingum', 'Georgetown (KY)', 'Campbellsville', 'Thomas More', 'Centre', 'Pikeville', 'Sewanee', 'Maryville (TN)', 'Cumberland', 'Bethel (TN)', 'Bryan', 'Tennessee Wesleyan'],

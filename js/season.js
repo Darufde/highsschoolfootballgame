@@ -5,9 +5,9 @@
 (function () {
   'use strict';
   const FNG = window.FNG;
-  const { RNG, U, Team, Players, Engine, Schedule, World, Coaches, Recruits, TeamRank, Colleges } = FNG;
+  const { RNG, U, Team, Players, Engine, Schedule, World, Coaches, Recruits, TeamRank, Colleges, Alumni } = FNG;
 
-  const SAVE_VERSION = 5;
+  const SAVE_VERSION = 6;
   const START_YEAR = 2026;
   const SIZE_ENROLL = { small: 240, medium: 600, large: 1200, xl: 2100 };
   const STATUS_PRESTIGE = { rebuild: 28, average: 50, established: 72 };
@@ -172,10 +172,14 @@
     });
     // News for the user's own players, one line per player.
     const mine = {};
+    const byId = {};
+    for (const p of state.roster) byId[p.id] = p;
     for (const ev of events) {
-      if (ev.kind !== 'offer') continue;
-      const p = state.roster.find((x) => x.id === ev.pid);
-      if (p) (mine[p.id] = mine[p.id] || { p, names: [] }).names.push(Colleges.get(ev.cid).name);
+      const p = byId[ev.pid];
+      if (!p) continue;
+      if (ev.kind === 'offer') (mine[p.id] = mine[p.id] || { p, names: [] }).names.push(Colleges.get(ev.cid).name);
+      else if (ev.kind === 'commit') addNews(state, 'Commitment: ' + Players.fullName(p) + ' (' + p.pos + ', class of ' + Recruits.classYear(p, state.year) + ') commits to ' + Colleges.get(ev.cid).name + '!', 'big');
+      else if (ev.kind === 'decommit') addNews(state, 'Recruiting: ' + Players.fullName(p) + ' (' + p.pos + ') decommits from ' + Colleges.get(ev.cid).name + '.', 'info');
     }
     for (const id in mine) {
       const { p, names } = mine[id];
@@ -200,7 +204,19 @@
       if (!f) return [];
       s = f.s;
     }
-    return Colleges.offersFor(state.cr, prospectMetrics(state, p, s));
+    const list = Colleges.offersFor(state.cr, prospectMetrics(state, p, s));
+    // The school he committed to comes first, flagged.
+    const cm = state.cr.commits && state.cr.commits[p.id];
+    if (cm) {
+      const at = list.findIndex((o) => o.college.id === cm[0]);
+      if (at >= 0) list.unshift(Object.assign(list.splice(at, 1)[0], { committed: true, commitYear: cm[1], commitWeek: cm[2] }));
+    }
+    return list;
+  }
+
+  // A player's commitment: { college, year, week } or null.
+  function collegeCommit(state, p) {
+    return state.cr ? Colleges.commitOf(state.cr, p.id) : null;
   }
 
   // Colleges evaluating a player that have not offered yet.
@@ -226,7 +242,7 @@
       const f = findPlayer(state, o.pid);
       if (!f) continue;
       const m = prospectMetrics(state, f.p, f.s);
-      out.push({ p: f.p, s: f.s, year: o.year, week: o.week, m, interest: Colleges.interest(Colleges.get(cid), m) });
+      out.push({ p: f.p, s: f.s, year: o.year, week: o.week, m, interest: Colleges.interest(Colleges.get(cid), m), commit: Colleges.commitOf(state.cr, o.pid) });
     }
     return out;
   }
@@ -274,6 +290,7 @@
       if (findPlayer(state, pid)) continue;
       delete state.cr.offers[pid];
       if (state.cr.meta) delete state.cr.meta[pid];
+      if (state.cr.commits) delete state.cr.commits[pid];
     }
   }
 
@@ -362,6 +379,11 @@
       state.recruits = null;
       updateRecruits(state, state.phase === 'offseason' ? 'Final' : 'Current');
     }
+    if (state.version === 5) {
+      state.version = 6;
+      if (state.cr && !state.cr.commits) state.cr.commits = {};
+      if (!state.alumni) state.alumni = [];
+    }
     return state;
   }
 
@@ -448,6 +470,7 @@
       rankings: { snaps: [], finals: [] },
       recruits: null,
       cr: Colleges.init(),
+      alumni: [],
       settings: { autoSave: true },
       created: Date.now(),
     };
@@ -1012,6 +1035,8 @@
         return { week: g.week, opp: opp.name, home, neutral: !!g.neutral, us: home ? g.hs : g.as, them: home ? g.as : g.hs, ot: g.ot, round: g.playoff ? g.playoff.round : 0 };
       }),
     });
+    // Former players finish their college or pro seasons.
+    for (const a of state.alumni || []) if (a.grad < state.year) for (const line of Alumni.playSeason(a, state.year)) addNews(state, 'Alumni: ' + line, 'info');
     const offerCounts = {};
     for (const p of state.roster) if (p.year === 4 && state.cr && state.cr.offers[p.id]) offerCounts[p.id] = state.cr.offers[p.id].length;
     const signings = signSeniors(state);
@@ -1038,6 +1063,12 @@
         const c = pick ? { name: pick.college.name, tier: 5, label: 'Signed with ' + pick.college.name + ' (' + Colleges.confName(pick.college.conf) + ')', cid: pick.college.id } : Recruits.commitment(p, sc, state.year);
         return { cid: c.cid || null, offers: (O.offerCounts || {})[p.id] || 0, id: p.id, name: Players.fullName(p), pos: p.pos, ovr: Players.ovr(p), pot: p.pot, rank: info ? info.rank : 0, stars: info ? info.stars : 0, outlook: c.label, college: c.name, tier: c.tier, honors: p.honors.slice(-2) };
       });
+      // Everyone who signs to play in college is followed as an alumnus.
+      if (!state.alumni) state.alumni = [];
+      for (const p of seniors) {
+        const g = O.graduates.find((x) => x.id === p.id);
+        if (g && g.tier >= 1 && g.college) state.alumni.push(Alumni.create(p, g, u, state.year));
+      }
       const signed = O.graduates.filter((g) => g.tier >= 3);
       state.coach.prospects += signed.length;
       for (const g of signed) addNews(state, g.name + ' (' + g.pos + ') signs with ' + g.college + '.', 'big');
@@ -1099,7 +1130,17 @@
       O.incoming = incoming.filter((p) => state.roster.includes(p)).map((p) => ({ id: p.id, name: Players.fullName(p), pos: p.pos, ovr: Players.ovr(p), stars: Players.potentialStars(p), origin: p.origin, year: Players.CLASS_NAME[p.year], level: p.level }));
       for (const p of incoming) delete p.origin;
     } else if (O.step === 3) {
+      const before = {};
+      for (const id in state.staff) if (state.staff[id]) before[id] = state.staff[id];
       O.staffChanges = Coaches.offseason(state.staff, rng);
+      // Alumni who leave the staff: retired for good, or coaching somewhere else for a while.
+      for (const ch of O.staffChanges) {
+        const a = alumnus(state, before[ch.role] && before[ch.role].alumId);
+        if (!a) continue;
+        a.status = 'retired';
+        if (ch.why === 'retired') a.coachDone = true;
+        else a.away = state.year + 4;
+      }
       for (const c of O.staffChanges) addNews(state, Coaches.ROLE[c.role].title + ' ' + c.name + ' ' + c.why + '.', 'info');
       state.staffRefresh = {};
       const add = budget(u);
@@ -1185,16 +1226,30 @@
     return state.phase === 'offseason' ? 0 : Math.round(coach.salary / 2);
   }
 
+  // Coaching candidates for a role: your own alumni first, then the open market.
   function marketFor(state, role) {
     const taken = new Set(Object.values(state.staff).filter(Boolean).map((c) => c.id));
-    return Coaches.candidates(role, state.year, state.staffRefresh[role] || 0).filter((c) => !taken.has(c.id));
+    const year = state.phase === 'offseason' ? state.year + 1 : state.year;
+    const alumni = Alumni.candidatesFor(state.alumni || [], role, year).sort((a, b) => Coaches.ovr(b) - Coaches.ovr(a));
+    return alumni.concat(Coaches.candidates(role, state.year, state.staffRefresh[role] || 0)).filter((c) => !taken.has(c.id));
+  }
+
+  function alumnus(state, id) {
+    return id ? (state.alumni || []).find((a) => a.id === id) || null : null;
   }
 
   function hire(state, role, coach) {
     const cost = hireCost(state, coach);
     if (state.program.funds < cost) return false;
     state.program.funds -= cost;
+    const prev = state.staff[role];
+    if (prev && alumnus(state, prev.alumId)) alumnus(state, prev.alumId).status = 'retired';
     state.staff[role] = Object.assign({}, coach, { years: 0 });
+    const a = alumnus(state, coach.alumId);
+    if (a) {
+      a.status = 'staff';
+      a.staffRole = role;
+    }
     state.staffRefresh[role] = (state.staffRefresh[role] || 0) + 1;
     addNews(state, user(state).name + ' hires ' + coach.first + ' ' + coach.last + ' as ' + Coaches.ROLE[role].title + '.', 'info');
     return true;
@@ -1204,6 +1259,8 @@
     const c = state.staff[role];
     if (!c) return false;
     state.staff[role] = null;
+    const a = alumnus(state, c.alumId);
+    if (a) a.status = 'retired';
     addNews(state, Coaches.ROLE[role].title + ' ' + c.first + ' ' + c.last + ' has been let go.', 'info');
     return true;
   }
@@ -1229,9 +1286,9 @@
     SAVE_VERSION, START_YEAR, ROUND_NAMES, FACILITIES, FOCUS, OFFSEASON_STEPS, SIZE_ENROLL, STATUS_PRESTIGE,
     school, user, league, addNews, preview, newGame, weekGames, userGame, userSchedule, opponentOf, gameWeather,
     simGame, advanceWeek, computeRatings, regionStandings, leagueStandings, aiRoster, findPlayer, recruitInfo, topRecruits,
-    collegeOffers, collegeSuitors, offeredPlayers, collegeBoard, collegeTargets, prospectMetrics,
+    collegeOffers, collegeSuitors, offeredPlayers, collegeBoard, collegeTargets, collegeCommit, prospectMetrics,
     teamStanding, latestSnap, migrate,
     userAlive, offseasonNext, upgradeCost, upgrade, scout, phaseLabel, budget, isUserGame, seasonSummary,
-    setLevel, autoLevels, hire, fire, hireCost, marketFor,
+    setLevel, autoLevels, hire, fire, hireCost, marketFor, alumnus,
   };
 })();

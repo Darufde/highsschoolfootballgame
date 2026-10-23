@@ -22,6 +22,7 @@
     { id: 'rankings', label: 'Team Rankings', icon: 'rankings' },
     { id: 'recruits', label: 'Recruits', icon: 'star' },
     { id: 'colleges', label: 'Colleges', icon: 'college' },
+    { id: 'alumni', label: 'Alumni', icon: 'alumni' },
     { id: 'playoffs', label: 'Playoffs', icon: 'playoffs' },
     { id: 'schools', label: 'Schools', icon: 'schools' },
     { id: 'program', label: 'Facilities', icon: 'program' },

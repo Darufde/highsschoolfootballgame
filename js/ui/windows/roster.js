@@ -134,7 +134,8 @@
             h('div', { class: 'meta row', style: { gap: '6px' } },
               h('span', { class: 'tag ' + LEVEL_TAG[p.level] }, Players.LEVEL_NAME[p.level]),
               p.injury > 0 ? h('span', { class: 'tag bad' }, 'Injured · out ' + p.injury + ' week' + (p.injury > 1 ? 's' : '')) : h('span', { class: 'tag good' }, 'Healthy'),
-              stars(Players.potentialStars(p)))),
+              stars(Players.potentialStars(p))),
+            Season.collegeCommit(st, p) ? h('div', { class: 'meta row', style: { gap: '6px' } }, FNG.UI.collegeLogo(Season.collegeCommit(st, p).college, 'sm'), h('span', { class: 'bold' }, 'Committed to ' + Season.collegeCommit(st, p).college.name)) : null),
           h('div', { class: 'center', style: { position: 'relative', zIndex: 1 } }, h('div', { class: 'tiny', style: { color: 'rgba(255,255,255,.75)' } }, 'OVERALL'), h('div', { style: { transform: 'scale(1.5)', marginTop: '8px' } }, ovrChip(o)))));
 
         body.appendChild(tabs([{ value: 'ratings', label: 'Ratings' }, { value: 'stats', label: 'Stats' }], w.state.tab, (v) => {

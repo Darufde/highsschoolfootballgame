@@ -131,6 +131,7 @@
         }
         const { p, s } = f;
         const info = Season.recruitInfo(st, p, s);
+        const commit = Season.collegeCommit(st, p);
         WM.setTitle(w.id, Players.fullName(p));
         const cy = Recruits.classYear(p, st.year);
         body.appendChild(h('div', { class: 'hero' },
@@ -138,7 +139,8 @@
           h('div', { class: 'grow', style: { position: 'relative', zIndex: 1 } },
             h('div', { class: 'name' }, '#' + p.num + ' ' + Players.fullName(p)),
             h('div', { class: 'meta' }, Players.POS_NAME[p.pos] + ' · Class of ' + cy + ' · ' + Players.heightStr(p.ht) + ', ' + p.wt + ' lbs'),
-            h('div', { class: 'meta' }, h('button', { type: 'button', class: 'linklike', style: { color: '#fff' }, onclick: () => Win.school(s.id) }, s.name), ' · ' + s.city + ', ' + World.stateName(s.state) + ' · ' + World.divLabel(s))),
+            h('div', { class: 'meta' }, h('button', { type: 'button', class: 'linklike', style: { color: '#fff' }, onclick: () => Win.school(s.id) }, s.name), ' · ' + s.city + ', ' + World.stateName(s.state) + ' · ' + World.divLabel(s)),
+            commit ? h('div', { class: 'meta row', style: { gap: '6px' } }, FNG.UI.collegeLogo(commit.college, 'sm'), h('span', { class: 'bold' }, 'Committed to ' + commit.college.name)) : null),
           h('div', { class: 'right', style: { position: 'relative', zIndex: 1 } },
             info ? h('div', null, stars(info.stars), h('div', { style: { fontSize: '22px', fontWeight: 800 } }, '#' + info.rank), h('div', { class: 'small', style: { color: 'rgba(255,255,255,.75)' } }, 'Class of ' + info.classYear + ' · ', moveTag(info.move))) : h('div', { class: 'small' }, 'Unranked'))));
         const film = st.program.facilities.film >= 3 || s.isUser;

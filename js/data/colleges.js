@@ -1,5 +1,5 @@
 /*
- * Colleges that recruit in the game: the Big Ten, SEC, ACC, Big 12 and Pac-12 programs plus Notre
+ * Colleges that recruit in the game: the Big Ten, SEC, ACC, Big 12, Pac-12 and American programs plus Notre
  * Dame, limited to the schools with a logo in assets/colleges/ (a college without a logo is not
  * in the game).
  *
@@ -19,6 +19,7 @@
     { id: 'ACC', name: 'ACC' },
     { id: 'B12', name: 'Big 12' },
     { id: 'P12', name: 'Pac-12' },
+    { id: 'AAC', name: 'American' },
     { id: 'IND', name: 'Independent' },
   ];
 
@@ -97,6 +98,20 @@ texas-state|Texas State|TXST|P12|San Marcos|TX|29.89|-97.94|#501214|#8D734A|50
 san-diego-state|San Diego State|SDSU|P12|San Diego|CA|32.78|-117.07|#A6192E|#000000|50
 utah-state|Utah State|USU|P12|Logan|UT|41.75|-111.81|#0F2439|#8A8D8F|48
 colorado-state|Colorado State|CSU|P12|Fort Collins|CO|40.57|-105.08|#1E4D2B|#C8C372|47
+tulane|Tulane|TUL|AAC|New Orleans|LA|29.94|-90.12|#006747|#418FDE|62
+memphis|Memphis|MEM|AAC|Memphis|TN|35.12|-89.94|#003087|#898D8D|60
+army|Army|ARMY|AAC|West Point|NY|41.39|-73.96|#000000|#D3BC8D|55
+navy|Navy|NAVY|AAC|Annapolis|MD|38.98|-76.49|#00205B|#C5B783|55
+utsa|UTSA|UTSA|AAC|San Antonio|TX|29.58|-98.62|#0C2340|#F15A22|52
+usf|USF|USF|AAC|Tampa|FL|28.06|-82.41|#006747|#CFC493|52
+east-carolina|East Carolina|ECU|AAC|Greenville|NC|35.61|-77.37|#592A8A|#FDC82F|50
+north-texas|North Texas|UNT|AAC|Denton|TX|33.21|-97.15|#00853E|#FFFFFF|50
+uab|UAB|UAB|AAC|Birmingham|AL|33.50|-86.80|#1E6B52|#F4C300|45
+fau|FAU|FAU|AAC|Boca Raton|FL|26.37|-80.10|#003366|#CC0000|43
+tulsa|Tulsa|TLSA|AAC|Tulsa|OK|36.15|-95.94|#002D72|#C8102E|43
+rice|Rice|RICE|AAC|Houston|TX|29.72|-95.40|#00205B|#C1C6C8|42
+temple|Temple|TEM|AAC|Philadelphia|PA|39.98|-75.16|#9D2235|#FFFFFF|40
+charlotte|Charlotte|CLT|AAC|Charlotte|NC|35.31|-80.74|#005035|#A49665|38
 notre-dame|Notre Dame|ND|IND|Notre Dame|IN|41.70|-86.24|#0C2340|#C99700|92
 `;
 
