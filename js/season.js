@@ -69,10 +69,13 @@
     return 0.85 + s.staffQ / 250;
   }
 
+  // Each school's developed classes carry over to the next season (cohorts), so a new season
+  // develops last year's classes one step instead of rebuilding every roster from scratch.
   function aiCacheFor(state) {
     let c = aiCache.get(state);
     if (!c || c.year !== state.year) {
-      c = { year: state.year, rosters: {}, contexts: {}, players: {} };
+      const cohorts = c && c.year === state.year - 1 ? c.cohorts : {};
+      c = { year: state.year, rosters: {}, contexts: {}, players: {}, cohorts, base: new Map() };
       aiCache.set(state, c);
     }
     return c;
@@ -81,7 +84,8 @@
   function aiRoster(state, s) {
     const c = aiCacheFor(state);
     if (!c.rosters[s.id]) {
-      c.rosters[s.id] = Players.aiRoster(s, state.year, aiDevMult(s));
+      const cohorts = c.cohorts[s.id] || (c.cohorts[s.id] = new Map());
+      c.rosters[s.id] = Players.aiRoster(s, state.year, aiDevMult(s), cohorts);
       for (const p of c.rosters[s.id]) c.players[p.id] = { p, s };
     }
     return c.rosters[s.id];
@@ -142,16 +146,23 @@
     if (state.recruits && state.recruits.year === state.year) for (const cy in state.recruits.classes) state.recruits.classes[cy].forEach((e, i) => (prev[e[0]] = i + 1));
     const classes = {};
     const pool = [];
+    // AI players don't change during a season, so their base score is computed once per season.
+    const cached = aiCacheFor(state).base;
     for (const s of state.schools) {
       const roster = s.isUser ? state.roster : aiRoster(state, s);
       for (const p of roster) {
-        const base = Recruits.baseScore(p, s);
+        let base = s.isUser ? undefined : cached.get(p);
+        if (base === undefined) {
+          base = Recruits.baseScore(p, s);
+          if (!s.isUser) cached.set(p, base);
+        }
         if (base < Recruits.MIN_SCORE - 6) continue;
         const sc = Math.round((base + Recruits.production(p, state.perf[p.id], s)) * 10) / 10;
         if (sc < Recruits.MIN_SCORE) continue;
         const cy = Recruits.classYear(p, state.year);
         (classes[cy] = classes[cy] || []).push([p.id, sc, 0]);
-        pool.push({ p, s, sc, cy });
+        // Colleges only look at players who can reach their pool (last week's class offsets, with room).
+        if (sc + ((state.cr && state.cr.off && state.cr.off[cy]) || 12) + 2 >= Colleges.POOL_MIN) pool.push({ p, s, sc, cy });
       }
     }
     for (const cy in classes) {
@@ -180,6 +191,7 @@
     const progress = state.phase === 'regular' ? (state.week - 1) / 10 : 1;
     const events = Colleges.update(state.cr, pool, {
       year: state.year, week: state.week, progress, perf: state.perf, center: state.cr.center, sosMean: state.cr.sosMean,
+      all: state.phase !== 'regular' || state.week === 1,
       rankOf: (id) => (rank[id] ? rank[id].rank : 0),
     });
     // News for the user's own players, one line per player.
@@ -621,16 +633,15 @@
 
   /* ------------------------------------------------------------------ */
   /* Background games                                                     */
-  /* Games with no team from the user's state are resolved from team       */
-  /* ratings instead of play by play, with box-score production for each   */
+  /* Every game but the user's own is resolved from team ratings instead   */
+  /* of play by play, with box-score production for each                   */
   /* team's starters so their recruiting still reflects how they play.     */
   /* The constants are fitted to the play-by-play engine.                  */
   /* ------------------------------------------------------------------ */
   const QUICK = { perPoint: 2.75, home: 2.6, spread: 14.5, total: 45.6, totalSd: 14.8, yards: 326, yardsPerPoint: 9 };
 
   function isBackground(state, game) {
-    const u = user(state);
-    return !isUserGame(state, game) && school(state, game.home).state !== u.state && school(state, game.away).state !== u.state;
+    return !isUserGame(state, game);
   }
 
   function quickGame(state, game) {

@@ -77,7 +77,7 @@
           h('span', { class: 'small muted' }, 'Freshman team: freshmen only. JV: no seniors. Only varsity players can start in varsity games.')));
         const cols = [
           { key: 'num', label: '#', value: (p) => p.num, cls: 'num r', defaultDir: 'asc' },
-          { key: 'name', label: 'Name', value: (p) => p.last + p.first, render: (p) => h('span', { class: 'bold' }, Players.fullName(p)), defaultDir: 'asc' },
+          { key: 'name', label: 'Name', value: (p) => p.last + p.first, render: (p) => (Season.collegeCommit(st, p) ? FNG.CollegeView.commitChip(Season.collegeCommit(st, p).college, Players.fullName(p)) : h('span', { class: 'bold' }, Players.fullName(p))), defaultDir: 'asc' },
           { key: 'pos', label: 'Pos', value: (p) => Players.POSITIONS.indexOf(p.pos), render: (p) => p.pos, defaultDir: 'asc' },
           { key: 'year', label: 'Yr', value: (p) => p.year, render: (p) => Players.CLASS_NAME[p.year] },
           { key: 'ht', label: 'Ht/Wt', value: (p) => p.wt, render: (p) => Players.heightStr(p.ht) + ' ' + p.wt, cls: 'muted' },
@@ -135,7 +135,7 @@
               h('span', { class: 'tag ' + LEVEL_TAG[p.level] }, Players.LEVEL_NAME[p.level]),
               p.injury > 0 ? h('span', { class: 'tag bad' }, 'Injured · out ' + p.injury + ' week' + (p.injury > 1 ? 's' : '')) : h('span', { class: 'tag good' }, 'Healthy'),
               stars(Players.potentialStars(p))),
-            Season.collegeCommit(st, p) ? h('div', { class: 'meta row', style: { gap: '6px' } }, FNG.UI.collegeLogo(Season.collegeCommit(st, p).college, 'sm'), h('span', { class: 'bold' }, 'Committed to ' + Season.collegeCommit(st, p).college.name)) : null),
+            Season.collegeCommit(st, p) ? h('div', { class: 'meta' }, FNG.CollegeView.commitChip(Season.collegeCommit(st, p).college, 'Committed to ' + Season.collegeCommit(st, p).college.name, () => Win.college(Season.collegeCommit(st, p).college.id))) : null),
           h('div', { class: 'center', style: { position: 'relative', zIndex: 1 } }, h('div', { class: 'tiny', style: { color: 'rgba(255,255,255,.75)' } }, 'OVERALL'), h('div', { style: { transform: 'scale(1.5)', marginTop: '8px' } }, ovrChip(o)))));
 
         body.appendChild(tabs([{ value: 'ratings', label: 'Ratings' }, { value: 'stats', label: 'Stats' }], w.state.tab, (v) => {
@@ -159,7 +159,7 @@
               info ? h('div', null,
                 h('div', { class: 'row', style: { gap: '8px' } }, stars(info.stars), h('b', null, '#' + info.rank + ' in the class of ' + info.classYear), FNG.RecruitView.moveTag(info.move)),
                 h('div', { class: 'small muted', style: { marginTop: '4px' } }, 'Rating ' + info.score.toFixed(1) + (st.perf[p.id] ? ' · ' + FNG.Recruits.statLine(p, st.perf[p.id]) : '')),
-                h('div', { class: 'small', style: { marginTop: '6px' } }, info.offers.length ? h('span', null, h('b', null, info.offers.length + ' major college offer' + (info.offers.length > 1 ? 's' : '') + ' '), FNG.CollegeView.logoStrip(info.offers, 8)) : 'No major college offers yet.'))
+                h('div', { class: 'small', style: { marginTop: '6px' } }, info.offers.length && info.offers[0].committed ? 'Committed to ' + info.offers[0].college.name + '.' : info.offers.length ? h('span', null, h('b', null, info.offers.length + ' major college offer' + (info.offers.length > 1 ? 's' : '') + ' '), FNG.CollegeView.logoStrip(info.offers, 8)) : 'No major college offers yet.'))
                 : h('div', null, h('div', { class: 'bold' }, 'Not ranked'), h('div', { class: 'help' }, outlook.label + '. Production, development and varsity snaps can move a player into the rankings.')),
               h('button', { type: 'button', class: 'btn sm mt', onclick: () => Win.recruits({ team: st.userId }) }, 'Recruit Rankings')),
             FNG.CollegeView.offersCard(st, p, Season.user(st)),

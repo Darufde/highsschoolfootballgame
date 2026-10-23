@@ -43,7 +43,7 @@
       h('div', { class: 'small', style: { margin: '6px 0' } }, rankLine(st, s)),
       h('div', { class: 'tiny muted bold' }, 'TOP RECRUITS'),
       recruits.length ? recruits.map((x) => h('div', { class: 'small', style: { marginTop: '3px' } },
-        FNG.UI.stars(x.info.stars), ' ', h('button', { type: 'button', class: 'linklike', onclick: () => open(x.p) }, FNG.Players.shortName(x.p)), ' ' + x.p.pos + ' · #' + x.info.rank + ' \u2019' + String(x.info.classYear).slice(2) + (x.info.offers.length ? ' · ' + x.info.offers.length + ' offers' : '')))
+        FNG.UI.stars(x.info.stars), ' ', FNG.CollegeView.playerName(st, x.p, FNG.Players.shortName(x.p), () => open(x.p)), ' ' + x.p.pos + ' · #' + x.info.rank + ' \u2019' + String(x.info.classYear).slice(2) + (x.info.offers.length && !x.info.offers[0].committed ? ' · ' + x.info.offers.length + ' offers' : '')))
         : h('div', { class: 'small dim' }, 'No ranked recruits'));
   }
 

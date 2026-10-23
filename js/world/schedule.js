@@ -5,6 +5,35 @@
   const { RNG, U } = FNG;
 
   const WEEKS = 10;
+  const NEAR = 120; // nearby schools each school considers for non-league games
+
+  // For every school, its nearest schools with distances: [[school, km], ...] closest first.
+  function nearestLists(schools, k) {
+    const cell = 0.5; // degrees
+    const grid = new Map();
+    const key = (i, j) => i * 100000 + j;
+    for (const s of schools) {
+      const kk = key(Math.floor(s.lat / cell), Math.floor(s.lon / cell));
+      if (!grid.has(kk)) grid.set(kk, []);
+      grid.get(kk).push(s);
+    }
+    const out = {};
+    for (const s of schools) {
+      const ci = Math.floor(s.lat / cell);
+      const cj = Math.floor(s.lon / cell);
+      let found = [];
+      for (let ring = 1; ring <= 12; ring++) {
+        found = [];
+        for (let i = ci - ring; i <= ci + ring; i++) for (let j = cj - ring; j <= cj + ring; j++) {
+          const list = grid.get(key(i, j));
+          if (list) for (const t of list) if (t !== s) found.push(t);
+        }
+        if (found.length >= k) break;
+      }
+      out[s.id] = found.map((t) => [t, U.distKm(s, t)]).sort((a, b) => a[1] - b[1]).slice(0, k);
+    }
+    return out;
+  }
 
   function generate(schools, leagues, year, userId) {
     const rng = new RNG('schedule|' + year);
@@ -60,6 +89,9 @@
       if (b.id === userId) return 1;
       return U.distKm(center, b) - U.distKm(center, a);
     });
+    // Each school looks at its nearest schools first (a spatial grid keeps this fast with thousands
+    // of schools), and at everyone only when none of those is free.
+    const near = nearestLists(schools, NEAR);
     for (let w = 1; w <= WEEKS; w++) {
       const free = order.filter((s) => !slots[s.id][w]);
       const open = new Set(free.map((s) => s.id));
@@ -67,14 +99,16 @@
         if (!open.has(s.id)) continue;
         let best = null;
         let bestScore = Infinity;
-        for (const t of free) {
-          if (t === s || !open.has(t.id) || t.leagueId === s.leagueId || played[s.id].has(t.id)) continue;
-          const score = U.distKm(s, t) + 28 * Math.abs(s.tier - t.tier) + rng.next() * 25;
+        const consider = (t, d) => {
+          if (t === s || !open.has(t.id) || t.leagueId === s.leagueId || played[s.id].has(t.id)) return;
+          const score = d + 28 * Math.abs(s.tier - t.tier) + rng.next() * 25;
           if (score < bestScore) {
             bestScore = score;
             best = t;
           }
-        }
+        };
+        for (const [t, d] of near[s.id]) consider(t, d);
+        if (!best) for (const t of free) consider(t, U.distKm(s, t));
         if (best) {
           add(w, s.id, best.id, false);
           open.delete(s.id);

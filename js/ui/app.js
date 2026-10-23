@@ -68,6 +68,8 @@
     try {
       App.state.savedAt = Date.now();
       localStorage.setItem(SAVE_KEY, LZ_PREFIX + FNG.lzCompress(JSON.stringify(App.state)));
+      lastSave = Date.now();
+      dirty = false;
       if (!quiet) toast('Game saved.', 'good', 1800);
       return true;
     } catch (e) {
@@ -223,15 +225,35 @@
     WM.refreshAll();
     renderTopbar();
     const st = App.state;
-    // Autosave just after the screen repaints, once per burst of changes.
-    if (st && st.settings.autoSave && !autoSaveTimer) {
-      autoSaveTimer = setTimeout(() => {
-        autoSaveTimer = null;
-        if (App.state) App.save(true);
-      }, 60);
+    if (st && st.settings.autoSave) {
+      dirty = true;
+      scheduleAutoSave();
     }
   };
+  /*
+   * Autosave writes the whole world, which takes a moment with thousands of schools, so it runs
+   * at most once every AUTOSAVE_MS while you play (just after the screen repaints), and right away
+   * when the page is hidden or closed. Save Game and Ctrl+S always save immediately.
+   */
+  const AUTOSAVE_MS = 30000;
   let autoSaveTimer = null;
+  let lastSave = 0;
+  let dirty = false;
+  function scheduleAutoSave() {
+    if (autoSaveTimer) return;
+    const wait = Math.max(60, lastSave + AUTOSAVE_MS - Date.now());
+    autoSaveTimer = setTimeout(() => {
+      autoSaveTimer = null;
+      if (App.state && dirty) App.save(true);
+    }, wait);
+  }
+  function flushSave() {
+    if (App.state && dirty) App.save(true);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushSave();
+  });
+  window.addEventListener('pagehide', flushSave);
 
   App.home = function () {
     if (App.state) Win.hub();

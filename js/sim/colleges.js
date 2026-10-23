@@ -43,7 +43,7 @@
   // scaling by how much it recruits the states in the game. Younger classes get a smaller share.
   const SLOTS = { QB: 18, RB: 27, WR: 39, TE: 18, OL: 45, DL: 42, LB: 27, CB: 30, S: 24, K: 4, P: 2 };
   const CLASS_SLOTS = [1, 0.75, 0.35, 0.12]; // seniors, juniors, sophomores, freshmen
-  const POOL_MIN = 55.5; // projected rating below which no power program evaluates a player
+  const POOL_MIN = 57; // projected rating below which no power program evaluates a player
   const CLASS_PEN = [0, 0.5, 2.5, 5]; // seniors, juniors, sophomores, freshmen: offers to younger players are rarer
   const WITHDRAW_AT = -5;
   const MUST_HAVE = 8; // a player this far above the bar gets an offer even if the position is full...
@@ -159,6 +159,27 @@
   }
   const NOISE_MAX = 2.449 * 1.3;
 
+  // Indexes of [item, score, item, score, ...] pairs from the highest score down, in steps of 0.1.
+  const BUCKET_LO = -12;
+  const BUCKET_HI = 60;
+  const BUCKETS = (BUCKET_HI - BUCKET_LO) * 10 + 1;
+  const bucketHeads = new Int32Array(BUCKETS);
+  let bucketNext = new Int32Array(1024);
+  function bucketOrder(pairs) {
+    const n = pairs.length / 2;
+    if (bucketNext.length < n) bucketNext = new Int32Array(n * 2);
+    bucketHeads.fill(-1);
+    for (let k = 0; k < n; k++) {
+      const b = Math.max(0, Math.min(BUCKETS - 1, Math.floor((pairs[k * 2 + 1] - BUCKET_LO) * 10)));
+      bucketNext[k] = bucketHeads[b];
+      bucketHeads[b] = k;
+    }
+    const out = new Array(n);
+    let j = 0;
+    for (let b = BUCKETS - 1; b >= 0; b--) for (let k = bucketHeads[b]; k !== -1; k = bucketNext[k]) out[j++] = k * 2;
+    return out;
+  }
+
   // A stable roll in [0, 1) for one player and one decision (commit week, flip week).
   function roll(m, salt) {
     let x = (Math.imul(m.h, 2654435761) ^ FNG.hashString(salt)) >>> 0;
@@ -265,8 +286,30 @@
       PEN[i] = CLASS_PEN[m.cls];
       YOUNG[i] = m.cls ? 1 : 0;
     }
+    // Prospects grouped by school: distance and state are per school, so a college can skip a whole
+    // school that is too far away or too weak to matter. Within a group players keep pool order.
+    const groups = new Map();
+    for (let i = 0; i < n; i++) {
+      const m = ms[i];
+      let g = groups.get(m.s.id);
+      if (!g) {
+        g = { d: m.d, rel: m.rel, top: -Infinity, ub: UB[i], idx: [], held: null };
+        groups.set(m.s.id, g);
+      }
+      g.idx.push(i);
+      // Best case before the home bonus (4), interest (3) and grading noise.
+      g.top = Math.max(g.top, UB[i] - 7 - NOISE_MAX);
+      if (m.held) {
+        if (!g.held) g.held = new Uint8Array(LIST.length);
+        for (let k = 0; k < m.held.length; k++) if (m.held[k]) g.held[k] = 1;
+      }
+    }
+    const groupList = [...groups.values()].sort((a, b) => b.ub - a.ub);
     const events = [];
     for (const c of LIST) {
+      // In-season, each college re-evaluates the pool every other week (half of them each week);
+      // ctx.all (preseason, final) runs every college.
+      if (!ctx.all && (c.i + ctx.week) % 2) continue;
       // Same as evaluate(), unrolled: this loop runs for every college and prospect each week.
       const bar = band(c);
       const q = c.prestige / 100;
@@ -277,36 +320,60 @@
       const slotCache = {};
       const ci = c.i;
       const cands = [];
-      for (let i = 0; i < n; i++) {
-        if (UB[i] < bar + WITHDRAW_AT) break;
-        const m = ms[i];
-        const held = m.held !== null && m.held[ci] === 1;
-        if (UB[i] < bar && !held) continue;
-        const dist = m.d[ci] - rch;
-        const base = V0[i] + q * V1[i] - bar + home[m.rel[ci]] - (dist > 0 ? dist / 100 : 0) - PEN[i] - (YOUNG[i] ? time : 0);
-        // Interest and the staff's grade add between -4 - NOISE_MAX and 3 + NOISE_MAX.
-        if (held ? base - 4 - NOISE_MAX >= WITHDRAW_AT : base + 3 + NOISE_MAX < 0) continue;
-        cands.push(m, base);
+      const keep = [];
+      for (const g of groupList) {
+        if (g.ub < bar + WITHDRAW_AT) break;
+        const dist = g.d[ci] - rch;
+        const geo = home[g.rel[ci]] - (dist > 0 ? dist / 100 : 0);
+        const anyHeld = g.held !== null && g.held[ci] === 1;
+        if (g.ub < bar + WITHDRAW_AT || (!anyHeld && g.top + geo - bar + 3 + NOISE_MAX < 0)) continue;
+        for (const i of g.idx) {
+          // Players in a group are best first, so the rest of the school can't reach this bar either.
+          if (UB[i] < bar + WITHDRAW_AT) break;
+          const m = ms[i];
+          const held = m.held !== null && m.held[ci] === 1;
+          if (UB[i] < bar && !held) continue;
+          const base = V0[i] + q * V1[i] - bar + geo - PEN[i] - (YOUNG[i] ? time : 0);
+          // Interest and the staff's grade add between -4 - NOISE_MAX and 3 + NOISE_MAX.
+          if (held) {
+            // A college never pulls the offer of a player committed to it.
+            if (base - 4 - NOISE_MAX < WITHDRAW_AT && m.commit !== c) keep.push(m, base);
+            continue;
+          }
+          if (base + 3 + NOISE_MAX < 0) continue;
+          // Boards only fill up during this pass, so a full board (or one closed by commitments)
+          // can be skipped before sorting.
+          const k = m.kpos;
+          const slots = slotCache[k] || (slotCache[k] = slotsFor(c, m.cy, m.p.pos, ctx.center, m.cls));
+          const have = mine[k] || 0;
+          if (have >= slots + OVERFLOW + 2) continue;
+          if (m.commit && c.prestige <= m.commit.prestige) continue;
+          if (!(m.rank > 0 && m.stars === 5)) {
+            if ((committed[c.id][k] || 0) >= Math.max(1, Math.round(slots / COMMITS_PER_SLOT))) continue;
+            // The more crowded the board, the higher the bar (see below); too low already.
+            if (base + 3 + NOISE_MAX < (4 * have) / slots) continue;
+          }
+          cands.push(m, base);
+        }
       }
-      // Best first by everything but interest and grading noise; the full grade is computed only
-      // for players who could still get (or lose) an offer.
-      const order = [];
-      for (let i = 0; i < cands.length; i += 2) order.push(i);
-      order.sort((x, y) => cands[y + 1] - cands[x + 1]);
+      // Offers this college holds: pulled if the player's stock fell well below its bar.
+      for (let i = 0; i < keep.length; i += 2) {
+        const m = keep[i];
+        if (finish(c, m, keep[i + 1]) < WITHDRAW_AT) {
+          const list = cr.offers[m.p.id];
+          list.splice(list.findIndex((o) => o[0] === c.id), 1);
+          mine[m.kpos]--;
+          events.push({ cid: c.id, pid: m.p.id, kind: 'pulled' });
+        }
+      }
+      // Best first by everything but interest and grading noise (a linear bucket sort in steps of a
+      // tenth of a point: every college ranks thousands of prospects each week); the full grade is
+      // computed only for players who could still get an offer.
+      const order = bucketOrder(cands);
       for (const i of order) {
         const m = cands[i];
         const base = cands[i + 1];
         const k = m.kpos;
-        if (m.held !== null && m.held[c.i] === 1) {
-          // A college never pulls the offer of a player committed to it.
-          if (m.commit !== c && finish(c, m, base) < WITHDRAW_AT) {
-            const list = cr.offers[m.p.id];
-            list.splice(list.findIndex((o) => o[0] === c.id), 1);
-            mine[k]--;
-            events.push({ cid: c.id, pid: m.p.id, kind: 'pulled' });
-          }
-          continue;
-        }
         const slots = slotCache[k] || (slotCache[k] = slotsFor(c, m.cy, m.p.pos, ctx.center, m.cls));
         const have = mine[k] || 0;
         // Five-stars get offers even when the position is already well stocked.
@@ -316,13 +383,14 @@
         if (m.commit && c.prestige <= m.commit.prestige) continue;
         if (!elite && (committed[c.id][k] || 0) >= Math.max(1, Math.round(slots / COMMITS_PER_SLOT))) continue;
         if (!elite && base + 3 + NOISE_MAX < (4 * have) / slots) continue;
-        const e = finish(c, m, base);
+        const it = interest(c, m);
+        const e = base + noise(c, m, 1.3, 0) + U.clamp((it - 50) / 10, -4, 3);
         if (e < 0) continue;
         // A staff won't spend an offer on an out-of-state player with almost no interest in the school.
-        if (m.rel[c.i] !== 2 && interest(c, m) < NO_CHANCE) continue;
+        if (m.rel[c.i] !== 2 && it < NO_CHANCE) continue;
         if (!elite && e - (4 * have) / slots < 0) continue;
         if (have >= slots && e < MUST_HAVE && !elite) continue;
-        if (m.commit && interest(c, m) < m.commitInterest + FLIP_GAP) continue;
+        if (m.commit && it < m.commitInterest + FLIP_GAP) continue;
         const entry = cr.offers[m.p.id] || (cr.offers[m.p.id] = []);
         entry.push([c.id, ctx.year, ctx.week]);
         mine[k] = have + 1;
@@ -333,13 +401,18 @@
     // goes on and the older they are; committed players flip when a clearly better offer comes along.
     const progress = U.clamp(ctx.progress, 0, 1);
     for (const m of ms) {
-      if (!cr.offers[m.p.id]) continue;
+      if (!cr.offers[m.p.id] || !cr.offers[m.p.id].length) continue;
       const tag = m.p.id + '|' + ctx.year + '|' + ctx.week;
+      // Roll first: most players don't commit (or flip) in a given week, and the roll decides that
+      // before any interest needs computing.
+      const r = roll(m, (m.commit ? 'flip|' : 'commit|') + tag);
+      const most = m.commit ? FLIP_CHANCE : (COMMIT_START[m.cls] + (COMMIT_END[m.cls] - COMMIT_START[m.cls]) * progress) * COMMIT_STARS[m.rank ? m.stars : 0] * 2.56;
+      if (r >= most) continue;
       const offers = offersFor(cr, m);
       if (!offers.length) continue;
       if (m.commit) {
         const better = offers.find((o) => o.college !== m.commit && o.interest >= m.commitInterest + FLIP_GAP);
-        if (better && roll(m, 'flip|' + tag) < FLIP_CHANCE) {
+        if (better && r < FLIP_CHANCE) {
           events.push({ cid: m.commit.id, pid: m.p.id, kind: 'decommit' });
           cr.commits[m.p.id] = [better.college.id, ctx.year, ctx.week];
           events.push({ cid: better.college.id, pid: m.p.id, kind: 'commit' });
@@ -348,7 +421,7 @@
       }
       const lead = offers[0];
       const chance = (COMMIT_START[m.cls] + (COMMIT_END[m.cls] - COMMIT_START[m.cls]) * progress) * COMMIT_STARS[m.rank ? m.stars : 0] * Math.pow(U.clamp(lead.interest / 65, 0.4, 1.6), 2);
-      if (roll(m, 'commit|' + tag) >= chance) continue;
+      if (r >= chance) continue;
       const pick = choose(cr, m);
       cr.commits[m.p.id] = [pick.college.id, ctx.year, ctx.week];
       events.push({ cid: pick.college.id, pid: m.p.id, kind: 'commit' });

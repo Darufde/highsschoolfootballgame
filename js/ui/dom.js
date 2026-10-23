@@ -91,6 +91,20 @@
     return h('span', { class: 'sbadge' + (size ? ' ' + size : ''), style, title: s.name }, txt);
   }
 
+  // Text color that reads on a background color, and a darker shade of a color (for gradients).
+  function hexRgb(hex) {
+    const c = hex.replace('#', '');
+    const v = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
+    return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16));
+  }
+  function inkFor(hex) {
+    const lum = hexRgb(hex).map((x) => x / 255).map((x) => (x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)));
+    return 0.2126 * lum[0] + 0.7152 * lum[1] + 0.0722 * lum[2] > 0.42 ? '#0b1220' : '#ffffff';
+  }
+  function shade(hex, f) {
+    return '#' + hexRgb(hex).map((x) => Math.round(x * (1 - f)).toString(16).padStart(2, '0')).join('');
+  }
+
   // College logo from assets/colleges/. If the file can't load, the college's colors and abbreviation stand in.
   function collegeLogo(c, size) {
     const el = h('span', { class: 'clogo img' + (size ? ' ' + size : ''), title: c.name });
@@ -235,5 +249,5 @@
     return rec.w + '-' + rec.l;
   }
 
-  FNG.UI = { h, append, icon, badge, collegeLogo, schoolColors, ovrChip, ratingClass, attrBar, stars, stat, seg, tabs, select, table, toast, busy, recordStr, PALETTE };
+  FNG.UI = { h, append, icon, badge, collegeLogo, inkFor, shade, schoolColors, ovrChip, ratingClass, attrBar, stars, stat, seg, tabs, select, table, toast, busy, recordStr, PALETTE };
 })();

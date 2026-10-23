@@ -44,17 +44,38 @@
     return el;
   }
 
-  // Offers cell for tables: count plus the leading logos.
+  // Offers cell for tables: count plus the leading logos. A committed player's other offers no
+  // longer matter (his name carries the commitment banner), so the cell just says so.
   function offersCell(offers, max) {
     if (!offers.length) return h('span', { class: 'dim' }, '—');
-    return h('span', { class: 'row nowrap', style: { gap: '6px' } }, h('b', { class: 'num' }, offers.length), logoStrip(offers, max || 4), offers[0].committed ? h('span', { class: 'tag good', title: 'Committed to ' + offers[0].college.name }, '✓') : null);
+    if (offers[0].committed) return h('span', { class: 'small muted' }, 'Committed');
+    return h('span', { class: 'row nowrap', style: { gap: '6px' } }, h('b', { class: 'num' }, offers.length), logoStrip(offers, max || 4));
   }
 
-  // "Committed to X" banner with the college's logo.
+  // A committed player's name as a banner in his college's color, with its logo on the right.
+  function commitChip(college, label, onclick, big) {
+    const c1 = college.colors[0];
+    return h(onclick ? 'button' : 'span', {
+      type: onclick ? 'button' : null,
+      class: 'commit-chip' + (big ? ' big' : ''),
+      style: { background: 'linear-gradient(90deg, ' + c1 + ' 0%, ' + c1 + ' 60%, ' + FNG.UI.shade(c1, 0.35) + ' 100%)', color: FNG.UI.inkFor(c1) },
+      title: 'Committed to ' + college.name,
+      onclick: onclick ? (e) => { e.stopPropagation(); onclick(); } : null,
+    }, h('span', { class: 'nm' }, label), collegeLogo(college, big ? 'md' : 'sm'));
+  }
+
+  // A player's name as a link, or as his commitment banner if he has committed.
+  function playerName(st, p, label, onclick) {
+    const cm = Season.collegeCommit(st, p);
+    if (cm) return commitChip(cm.college, label, onclick);
+    return h('button', { type: 'button', class: 'linklike', onclick }, label);
+  }
+
+  // "Committed to X" banner for profiles.
   function commitBanner(st, o) {
-    return h('div', { class: 'commit-banner' }, collegeLogo(o.college, 'md'),
-      h('div', null, h('div', { class: 'bold' }, 'Committed to ', h('button', { type: 'button', class: 'linklike', onclick: () => Win.college(o.college.id) }, o.college.name)),
-        h('div', { class: 'tiny muted' }, 'Verbal commitment ' + offeredWhen(st, o.commitYear, o.commitWeek) + '. He signs at the end of his senior season unless a better offer flips him.')));
+    return h('div', null,
+      commitChip(o.college, 'Committed to ' + o.college.name, () => Win.college(o.college.id), true),
+      h('div', { class: 'tiny muted', style: { marginTop: '6px' } }, 'Verbal commitment ' + offeredWhen(st, o.commitYear, o.commitWeek) + '. He signs at the end of his senior season unless a better offer flips him.'));
   }
 
   // Profile card: every major college offer, other offers and colleges still evaluating the player.
@@ -66,8 +87,12 @@
     const card = h('div', { class: 'card' },
       h('div', { class: 'row between' }, h('h3', { class: 'sect', style: { margin: 0 } }, 'College Offers' + (offers.length ? ' · ' + offers.length : '')),
         h('button', { type: 'button', class: 'btn sm ghost', onclick: () => Win.colleges() }, 'All Colleges')));
+    if (offers.length && offers[0].committed) {
+      // Committed: the commitment is what matters, not the schools he passed on.
+      card.appendChild(commitBanner(st, offers[0]));
+      return card;
+    }
     if (offers.length) {
-      if (offers[0].committed) card.appendChild(commitBanner(st, offers[0]));
       card.appendChild(h('div', { class: 'small muted', style: { margin: '4px 0 2px' } }, 'Major college offers, by the player’s interest.'));
       offers.forEach((o, i) => card.appendChild(h('div', { class: 'offer-row' },
         collegeLogo(o.college, 'md'),
@@ -94,9 +119,14 @@
       if (!list.length) col.appendChild(h('div', { class: 'small dim' }, 'No major college offers on this roster.'));
       for (const x of list.slice(0, 8)) {
         const info = Season.recruitInfo(st, x.p, s);
+        const meta = ' ' + x.p.pos + ' · ' + Players.CLASS_NAME[x.p.year] + (info ? ' · #' + info.rank : '');
+        if (x.offers[0].committed) {
+          col.appendChild(h('div', { class: 'gp' }, h('div', { class: 'small', style: { gridColumn: '1 / -1' } }, commitChip(x.offers[0].college, Players.shortName(x.p) + meta, () => openPlayer(st, x.p)))));
+          continue;
+        }
         col.appendChild(h('div', { class: 'gp' },
-          h('div', { class: 'small ellipsis' }, h('button', { type: 'button', class: 'linklike', onclick: () => openPlayer(st, x.p) }, Players.shortName(x.p)), ' ' + x.p.pos + ' · ' + Players.CLASS_NAME[x.p.year] + (info ? ' · #' + info.rank : '')),
-          h('div', { class: 'small bold num' }, x.offers[0].committed ? h('span', { class: 'tag good', title: 'Committed to ' + x.offers[0].college.name }, '✓ ' + x.offers[0].college.abbr) : x.offers.length + ' offer' + (x.offers.length > 1 ? 's' : '')),
+          h('div', { class: 'small ellipsis' }, h('button', { type: 'button', class: 'linklike', onclick: () => openPlayer(st, x.p) }, Players.shortName(x.p)), meta),
+          h('div', { class: 'small bold num' }, x.offers.length + ' offer' + (x.offers.length > 1 ? 's' : '')),
           logoStrip(x.offers, 10)));
       }
       if (list.length > 8) col.appendChild(h('div', { class: 'tiny muted', style: { marginTop: '4px' } }, '+' + (list.length - 8) + ' more players with offers'));
@@ -227,7 +257,7 @@
         // Where each offered player stands: committed here, committed elsewhere, or still open.
         const statusCol = { key: 'cm', label: 'Status', value: (r) => (r.commit ? (r.commit.college.id === id ? 2 : 1) : 0), render: (r) => (!r.commit ? h('span', { class: 'dim' }, 'Open') : r.commit.college.id === id ? h('span', { class: 'tag good' }, 'Committed') : h('span', { class: 'row nowrap', style: { gap: '4px' }, title: 'Committed to ' + r.commit.college.name }, collegeLogo(r.commit.college, 'sm'), h('span', { class: 'small muted' }, r.commit.college.abbr))) };
 
-        const nameCol = { key: 'n', label: 'Prospect', value: (r) => r.p.last + r.p.first, defaultDir: 'asc', render: (r) => h('button', { type: 'button', class: 'linklike', onclick: () => openPlayer(st, r.p) }, Players.fullName(r.p)) };
+        const nameCol = { key: 'n', label: 'Prospect', value: (r) => r.p.last + r.p.first, defaultDir: 'asc', render: (r) => playerName(st, r.p, Players.fullName(r.p), () => openPlayer(st, r.p)) };
         const schoolCol = { key: 'sch', label: 'School', value: (r) => r.s.name, defaultDir: 'asc', render: (r) => h('div', { class: 'row nowrap', style: { gap: '6px' } }, badge(r.s, st, 'sm'), h('button', { type: 'button', class: 'linklike', onclick: () => Win.school(r.s.id) }, r.s.name), h('span', { class: 'tiny muted' }, r.s.state)) };
         const common = [
           nameCol,
@@ -291,5 +321,5 @@
     });
   };
 
-  FNG.CollegeView = { logoStrip, offersCell, offersCard, gameOffers, interestBar, offeredWhen, commitBanner };
+  FNG.CollegeView = { logoStrip, offersCell, offersCard, gameOffers, interestBar, offeredWhen, commitBanner, commitChip, playerName };
 })();

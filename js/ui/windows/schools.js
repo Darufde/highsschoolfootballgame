@@ -102,7 +102,7 @@
           const r = s.isUser ? Team.userRatings(st) : Season.scout(st, s);
           const recs = Season.topRecruits(st, s, 6);
           const recCard = h('div', { class: 'card' }, h('div', { class: 'row between' }, h('h3', { class: 'sect', style: { margin: 0 } }, 'Ranked Recruits'), recs.length ? h('button', { type: 'button', class: 'btn sm ghost', onclick: () => Win.recruits({ team: s.id }) }, 'Rankings') : null),
-            recs.length ? recs.map((x) => h('div', { class: 'small', style: { marginTop: '6px' } }, stars(x.info.stars), ' ', h('button', { type: 'button', class: 'linklike', onclick: () => (s.isUser ? Win.player(x.p.id) : Win.prospect(x.p.id)) }, Players.fullName(x.p)), ' · ' + x.p.pos + ' · #' + x.info.rank + ' class of ' + x.info.classYear, x.info.offers.length ? h('div', { style: { marginTop: '2px' } }, FNG.CollegeView.logoStrip(x.info.offers, 10)) : null)) : h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'No ranked recruits.'));
+            recs.length ? recs.map((x) => h('div', { class: 'small', style: { marginTop: '6px' } }, stars(x.info.stars), ' ', FNG.CollegeView.playerName(st, x.p, Players.fullName(x.p), () => (s.isUser ? Win.player(x.p.id) : Win.prospect(x.p.id))), ' · ' + x.p.pos + ' · #' + x.info.rank + ' class of ' + x.info.classYear, x.info.offers.length && !x.info.offers[0].committed ? h('div', { style: { marginTop: '2px' } }, FNG.CollegeView.logoStrip(x.info.offers, 10)) : null)) : h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'No ranked recruits.'));
           body.appendChild(h('div', { class: 'grid c2' }, h('div', { class: 'col' }, info, recCard), ratingBars(r, s.isUser ? 'Team Ratings' : 'Scouting Report' + (st.program.facilities.film < 4 ? ' (estimated)' : ''))));
         } else if (T === 'schedule') {
           const games = st.games.filter((g) => g.home === s.id || g.away === s.id).sort((a, b) => a.week - b.week);
@@ -122,7 +122,7 @@
           body.appendChild(h('p', { class: 'small muted', style: { marginTop: 0 } }, ro.length + ' varsity players. ' + (scouted ? 'Ratings from your film room.' : 'Upgrade the Film Room to level 3 to see individual ratings.')));
           body.appendChild(table([
             { key: 'num', label: '#', render: (p) => p.num, cls: 'num r' },
-            { key: 'n', label: 'Name', render: (p) => h('button', { type: 'button', class: 'linklike', onclick: () => Win.prospect(p.id) }, Players.fullName(p)) },
+            { key: 'n', label: 'Name', render: (p) => FNG.CollegeView.playerName(st, p, Players.fullName(p), () => Win.prospect(p.id)) },
             { key: 'p', label: 'Pos', render: (p) => p.pos },
             { key: 'y', label: 'Yr', render: (p) => Players.CLASS_NAME[p.year] },
             { key: 'o', label: 'Ovr', render: (p) => (scouted ? ovrChip(Players.ovr(p)) : h('span', { class: 'dim' }, '?')), cls: 'c' },

@@ -205,7 +205,7 @@
         const st = App.state;
         if (st) {
           body.appendChild(h('div', { class: 'card mb' }, h('h3', { class: 'sect' }, 'Saving'),
-            h('div', { class: 'row between' }, h('span', null, 'Auto-save after every change'), seg([{ value: true, label: 'On' }, { value: false, label: 'Off' }], st.settings.autoSave, (v) => { st.settings.autoSave = v; App.changed(); App.save(true); })),
+            h('div', { class: 'row between' }, h('span', null, 'Auto-save (at most every 30 seconds while you play, and when you leave)'), seg([{ value: true, label: 'On' }, { value: false, label: 'Off' }], st.settings.autoSave, (v) => { st.settings.autoSave = v; App.changed(); App.save(true); })),
             h('div', { class: 'row mt' },
               h('button', { type: 'button', class: 'btn primary', onclick: () => App.save() }, icon('save', 15), 'Save Now'),
               h('button', { type: 'button', class: 'btn', onclick: () => App.exportSave() }, 'Export Save'),

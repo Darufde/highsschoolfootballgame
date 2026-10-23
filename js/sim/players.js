@@ -297,31 +297,53 @@
 
   // school.ct maps entry year -> class talent. devMult reflects the program's coaching.
   // Each class is developed to its current grade, then every position keeps its best players.
-  function aiRoster(school, year, devMult) {
+  // cohorts (optional): this school's developed classes from last season (entry year -> { grade,
+  // devMult, talent, players }); a class one grade behind is developed one more step instead of
+  // being rebuilt, which gives exactly the same players. The map is updated for next season.
+  function aiRoster(school, year, devMult, cohorts) {
     const V = aiVarsitySize(school.enrollment);
     const poolSize = Math.round(V * 0.5) + 4;
     const all = [];
+    const next = cohorts ? new Map() : null;
     for (let grade = 1; grade <= 4; grade++) {
       const entry = year - grade + 1;
       const talent = (school.ct && school.ct[entry] != null ? school.ct[entry] : 28) + 0.5;
-      for (const p of aiCohort(school.id, entry, talent, poolSize)) {
-        for (let step = 1; step < grade; step++) {
+      const prev = cohorts && cohorts.get(entry);
+      let pool;
+      let from = 1;
+      if (prev && prev.grade === grade - 1 && prev.devMult === devMult && prev.talent === talent && prev.players.length === poolSize) {
+        pool = prev.players;
+        from = grade - 1;
+      } else pool = aiCohort(school.id, entry, talent, poolSize);
+      for (const p of pool) {
+        for (let step = from; step < grade; step++) {
           developOffseason(new RNG(p.id + '|' + step), p, { mult: devMult, practice: 1, physical: 0 });
           p.year++;
         }
+        p.num = 0;
         all.push(p);
       }
+      if (next) next.set(entry, { grade, devMult, talent, players: pool });
     }
-    all.sort((a, b) => ovr(b) - ovr(a));
+    if (cohorts) {
+      cohorts.clear();
+      for (const [k, v] of next) cohorts.set(k, v);
+    }
+    // Sort by overall once (stable, so ties keep generation order).
+    const o = new Map();
+    for (const p of all) o.set(p, ovr(p));
+    all.sort((a, b) => o.get(b) - o.get(a));
     const roster = [];
     const taken = new Set();
     for (const pos of POSITIONS) {
       const want = Math.max(AI_MIN[pos], Math.round(V * POS_MIX[pos]));
+      let have = 0;
       for (const p of all) {
-        if (roster.filter((x) => x.pos === pos).length >= want) break;
+        if (have >= want) break;
         if (p.pos === pos && !taken.has(p.id)) {
           roster.push(p);
           taken.add(p.id);
+          have++;
         }
       }
     }

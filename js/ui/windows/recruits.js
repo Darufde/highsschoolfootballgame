@@ -93,7 +93,7 @@
           { key: 'mv', label: '+/-', render: (r) => moveTag(r.prev ? r.prev - r.rank : null) },
           S.st !== 'all' ? { key: 'srk', label: S.st, render: (r) => stateRank[r.p.id], cls: 'num' } : null,
           { key: 'prk', label: 'Pos Rk', render: (r) => r.p.pos + ' #' + posRank[r.p.id], cls: 'muted' },
-          { key: 'n', label: 'Prospect', render: (r) => h('button', { type: 'button', class: 'linklike', onclick: () => openPlayer(st, r.p) }, Players.fullName(r.p)) },
+          { key: 'n', label: 'Prospect', render: (r) => FNG.CollegeView.playerName(st, r.p, Players.fullName(r.p), () => openPlayer(st, r.p)) },
           { key: 'pos', label: 'Pos', render: (r) => r.p.pos },
           { key: 'hw', label: 'Ht/Wt', render: (r) => Players.heightStr(r.p.ht) + ' ' + r.p.wt, cls: 'muted' },
           { key: 'sch', label: 'School', render: (r) => h('div', { class: 'row nowrap', style: { gap: '6px' } }, badge(r.s, st, 'sm'), h('button', { type: 'button', class: 'linklike', onclick: () => Win.school(r.s.id) }, r.s.name), h('span', { class: 'tiny muted' }, r.s.state)) },
@@ -140,7 +140,7 @@
             h('div', { class: 'name' }, '#' + p.num + ' ' + Players.fullName(p)),
             h('div', { class: 'meta' }, Players.POS_NAME[p.pos] + ' · Class of ' + cy + ' · ' + Players.heightStr(p.ht) + ', ' + p.wt + ' lbs'),
             h('div', { class: 'meta' }, h('button', { type: 'button', class: 'linklike', style: { color: '#fff' }, onclick: () => Win.school(s.id) }, s.name), ' · ' + s.city + ', ' + World.stateName(s.state) + ' · ' + World.divLabel(s)),
-            commit ? h('div', { class: 'meta row', style: { gap: '6px' } }, FNG.UI.collegeLogo(commit.college, 'sm'), h('span', { class: 'bold' }, 'Committed to ' + commit.college.name)) : null),
+            commit ? h('div', { class: 'meta' }, FNG.CollegeView.commitChip(commit.college, 'Committed to ' + commit.college.name, () => Win.college(commit.college.id))) : null),
           h('div', { class: 'right', style: { position: 'relative', zIndex: 1 } },
             info ? h('div', null, stars(info.stars), h('div', { style: { fontSize: '22px', fontWeight: 800 } }, '#' + info.rank), h('div', { class: 'small', style: { color: 'rgba(255,255,255,.75)' } }, 'Class of ' + info.classYear + ' · ', moveTag(info.move))) : h('div', { class: 'small' }, 'Unranked'))));
         const film = st.program.facilities.film >= 3 || s.isUser;
@@ -151,7 +151,7 @@
               h('dt', null, 'National rank'), h('dd', null, '#' + info.rank + ' in the class of ' + info.classYear),
               h('dt', null, 'Movement'), h('dd', null, info.prev ? 'Was #' + info.prev + ' ' : 'Newly ranked ', moveTag(info.move)),
               h('dt', null, 'This season'), h('dd', null, Recruits.statLine(p, st.perf[p.id]) || '—'),
-              h('dt', null, 'Offers'), h('dd', null, info.offers.length ? FNG.CollegeView.logoStrip(info.offers, 12) : 'No major college offers yet')) : h('p', { class: 'muted small' }, 'Not currently ranked in the class of ' + cy + '.')),
+              h('dt', null, 'Offers'), h('dd', null, commit ? 'Committed to ' + commit.college.name : info.offers.length ? FNG.CollegeView.logoStrip(info.offers, 12) : 'No major college offers yet')) : h('p', { class: 'muted small' }, 'Not currently ranked in the class of ' + cy + '.')),
           FNG.CollegeView.offersCard(st, p, s),
           h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Scouting'), h('dl', { class: 'kv' },
             h('dt', null, 'Overall'), h('dd', null, film ? ovrChip(Players.ovr(p)) : '?'),
