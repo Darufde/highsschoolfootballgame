@@ -21,7 +21,7 @@
         const box = h('div', { class: 'title-screen' },
           h('div', { class: 'ball-mark' }),
           h('div', { class: 'logo' }, 'FRIDAY NIGHT', h('br'), 'GRIDIRON'),
-          h('div', { class: 'sub' }, 'Ohio & Kentucky High School Football'));
+          h('div', { class: 'sub' }, 'Ohio, Kentucky & Tennessee High School Football'));
         if (!sum && App.hasOldSave()) {
           box.appendChild(h('div', { class: 'card tight mb', style: { textAlign: 'left' } }, h('div', { class: 'small' }, 'Your saved program is from an earlier version of the game and can\u2019t be loaded. Start a new program to play this version.')));
         }
@@ -143,7 +143,7 @@
           }
         });
         left.appendChild(h('div', { class: 'grid c2' },
-          field('State', stateSel, 'Ohio and Kentucky are playable. More states are on the way.', 'state'),
+          field('State', stateSel, 'Ohio, Kentucky and Tennessee are playable. More states are on the way.', 'state'),
           field('City', h('div', { class: 'combo' }, cityInput, list), null, 'city')));
         left.lastChild.lastChild.appendChild(cityNote);
 
@@ -165,7 +165,7 @@
           }
           refreshPreview();
         };
-        left.appendChild(field('School Name', h('div', { class: 'row nowrap' }, nameInput, h('button', { type: 'button', class: 'btn', onclick: suggest, title: 'Suggest a name' }, 'Suggest')), 'Names only — Ohio schools in this game have no mascots.', 'name'));
+        left.appendChild(field('School Name', h('div', { class: 'row nowrap' }, nameInput, h('button', { type: 'button', class: 'btn', onclick: suggest, title: 'Suggest a name' }, 'Suggest')), 'Names only — schools in this game have no mascots.', 'name'));
 
         // Type
         const typeHelp = h('div', { class: 'help' });
@@ -196,7 +196,7 @@
           refreshPreview();
         }, 'full'));
         drawStatus();
-        left.appendChild(field('Enrollment', sizeSel, 'Sets your division (Ohio) or class (Kentucky). Your program will have roughly 100-150 players.', 'size'));
+        left.appendChild(field('Enrollment', sizeSel, 'Sets your division (Ohio) or class (Kentucky, Tennessee). Tennessee private schools of 250+ students play in Division II. Your program will have roughly 100-150 players.', 'size'));
         left.appendChild(field('Program Tradition', statusBox, 'Sets starting talent, prestige and expectations.', 'status'));
 
         // Colors
@@ -219,7 +219,7 @@
           const n = form.name.trim();
           if (!n) out.name = 'Name your school.';
           else if (n.length < 3) out.name = 'That name is too short.';
-          else if (existing.has(n.toLowerCase())) out.name = 'A school named "' + n + '" already exists in Ohio.';
+          else if (existing.has(n.toLowerCase())) out.name = 'A school named "' + n + '" already exists.';
           return out;
         };
 
@@ -247,9 +247,9 @@
               h('dt', null, 'Program'), h('dd', null, '~' + FNG.Players.programTarget(s.enrollment) + ' players (varsity, JV, freshman)'),
               h('dt', null, oh ? 'Division' : 'Class'), h('dd', null, World.divLabel(s) + (oh ? '' : ' (' + pv.groupSize + ' schools)')),
               oh ? h('dt', null, 'Region') : null, oh ? h('dd', null, 'Region ' + s.region + ' · ' + World.regionName(s.region) + ' (' + pv.groupSize + ' schools)') : null,
-              h('dt', null, oh ? 'League' : 'District'), h('dd', null, pv.league),
-              h('dt', null, 'Playoffs'), h('dd', null, oh ? 'OHSAA format: top 16 per region' : 'KHSAA format not in the game yet')));
-            card.appendChild(h('h3', { class: 'sect mt' }, oh ? 'League Opponents' : 'District Opponents'));
+              h('dt', null, World.leagueWord(s.state)), h('dd', null, pv.league),
+              h('dt', null, 'Playoffs'), h('dd', null, oh ? 'OHSAA format: top 16 per region' : (s.state === 'KY' ? 'KHSAA' : 'TSSAA') + ' format not in the game yet')));
+            card.appendChild(h('h3', { class: 'sect mt' }, World.leagueWord(s.state) + ' Opponents'));
             card.appendChild(h('div', { class: 'small', style: { lineHeight: 1.7 } }, pv.leagueMates.map((x) => x.name + ' (' + x.city + ')').join(' · ')));
             if (pv.sameCity.length) {
               card.appendChild(h('h3', { class: 'sect mt' }, 'Also in ' + form.city));
@@ -264,7 +264,7 @@
           const start = h('button', { type: 'button', class: 'btn primary lg block mt', onclick: () => begin() }, icon('play', 16), 'Start Program');
           right.appendChild(start);
           const all = World.baseWorld().schools;
-          right.appendChild(h('div', { class: 'help center' }, U.num(all.filter((x) => x.state === 'OH').length) + ' Ohio schools · ' + U.num(all.filter((x) => x.state === 'KY').length) + ' Kentucky schools'));
+          right.appendChild(h('div', { class: 'help center' }, World.STATES.map((k) => U.num(all.filter((x) => x.state === k).length) + ' ' + World.stateName(k)).join(' · ') + ' schools'));
           start.disabled = Object.keys(errs).length > 0;
         };
 

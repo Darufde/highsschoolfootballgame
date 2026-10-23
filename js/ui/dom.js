@@ -58,6 +58,7 @@
     news: '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/>',
     staff: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2.8h6V4M8.5 10h7M8.5 14h7M8.5 18h4"/>',
     star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+    college: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c1.5 1.6 3.7 2.5 6 2.5s4.5-.9 6-2.5v-5"/><path d="M22 9v6"/>',
   };
 
   function icon(name, size) {
@@ -87,6 +88,43 @@
     const style = { background: bg, color: fg, borderColor: fg };
     if (txt.length >= 3) style.fontSize = size === 'lg' ? '15px' : size === 'sm' ? '7px' : '8.5px';
     return h('span', { class: 'sbadge' + (size ? ' ' + size : ''), style, title: s.name }, txt);
+  }
+
+  /*
+   * College logos load from img/colleges/<id>.png (then .svg, .webp, .jpg). Until a file loads, or
+   * when none exists, the college shows a badge in its colors. Each college is looked up once.
+   */
+  const LOGO_EXT = ['png', 'svg', 'webp', 'jpg'];
+  const logoSrc = {};
+  const logoProbe = {};
+  function findLogo(c) {
+    if (!logoProbe[c.id]) {
+      logoProbe[c.id] = new Promise((resolve) => {
+        let i = 0;
+        const img = new Image();
+        img.onload = () => resolve(c.logo + '.' + LOGO_EXT[i]);
+        img.onerror = () => {
+          i++;
+          if (i < LOGO_EXT.length) img.src = c.logo + '.' + LOGO_EXT[i];
+          else resolve(null);
+        };
+        img.src = c.logo + '.' + LOGO_EXT[0];
+      }).then((src) => (logoSrc[c.id] = src));
+    }
+    return logoProbe[c.id];
+  }
+  function collegeLogo(c, size) {
+    const el = h('span', { class: 'clogo' + (size ? ' ' + size : ''), title: c.name, style: { background: c.colors[0], color: c.colors[1], borderColor: c.colors[1] } }, h('span', { class: 'ab' + (c.abbr.length >= 4 ? ' long' : '') }, c.abbr));
+    const show = (src) => {
+      if (!src) return;
+      el.replaceChildren(h('img', { src, alt: c.name, draggable: 'false' }));
+      el.classList.add('img');
+      el.style.background = '';
+      el.style.borderColor = '';
+    };
+    if (c.id in logoSrc) show(logoSrc[c.id]);
+    else findLogo(c).then(show);
+    return el;
   }
 
   // Career scale: 99 is a Hall of Fame pro, so high school ratings live mostly in the 15-60 range.
@@ -220,5 +258,5 @@
     return rec.w + '-' + rec.l;
   }
 
-  FNG.UI = { h, append, icon, badge, schoolColors, ovrChip, ratingClass, attrBar, stars, stat, seg, tabs, select, table, toast, busy, recordStr, PALETTE };
+  FNG.UI = { h, append, icon, badge, collegeLogo, schoolColors, ovrChip, ratingClass, attrBar, stars, stat, seg, tabs, select, table, toast, busy, recordStr, PALETTE };
 })();

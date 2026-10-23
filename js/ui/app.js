@@ -19,6 +19,7 @@
     { id: 'standings', label: 'Standings', icon: 'standings' },
     { id: 'rankings', label: 'Team Rankings', icon: 'rankings' },
     { id: 'recruits', label: 'Recruits', icon: 'star' },
+    { id: 'colleges', label: 'Colleges', icon: 'college' },
     { id: 'playoffs', label: 'Playoffs', icon: 'playoffs' },
     { id: 'schools', label: 'Schools', icon: 'schools' },
     { id: 'program', label: 'Facilities', icon: 'program' },
@@ -46,7 +47,7 @@
   }
 
   function valid(s) {
-    return s && (s.version === Season.SAVE_VERSION || s.version === 2) && Array.isArray(s.schools) && Array.isArray(s.roster) && s.userId;
+    return s && (s.version === Season.SAVE_VERSION || s.version === 2 || s.version === 3) && Array.isArray(s.schools) && Array.isArray(s.roster) && s.userId;
   }
 
   // A save from an earlier version of the game that can no longer be loaded.
@@ -286,8 +287,9 @@
   };
 
   function afterWeek(st, week) {
-    if (week === 10 && st.phase === 'playoffs' && Season.user(st).state === 'KY') {
-      toast('Regular season complete. Kentucky\u2019s KHSAA playoffs are not in the game yet.', 'warn', 6000);
+    const us = Season.user(st).state;
+    if (week === 10 && st.phase === 'playoffs' && us !== 'OH') {
+      toast('Regular season complete. ' + FNG.World.stateName(us) + '\u2019s ' + (us === 'KY' ? 'KHSAA' : 'TSSAA') + ' playoffs are not in the game yet.', 'warn', 6000);
     } else if (week === 10 && st.phase === 'playoffs') {
       const u = Season.user(st);
       toast(u.rec.seed ? 'Playoffs! ' + u.name + ' is the No. ' + u.rec.seed + ' seed in Region ' + u.region + '.' : u.name + ' missed the playoffs.', u.rec.seed ? 'good' : 'warn', 6000);

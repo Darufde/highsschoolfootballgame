@@ -131,9 +131,9 @@
         if (prevSnap) for (const r of FNG.TeamRank.list(st, prevSnap, filter)) prevRank[r.s.id] = r.rank;
 
         const controls = h('div', { class: 'toolbar' }, select(snapOpts, S.snap, (v) => { S.snap = v; WM.refresh(w.id); }));
-        if (S.tab !== 'national') controls.appendChild(seg([{ value: 'OH', label: 'Ohio' }, { value: 'KY', label: 'Kentucky' }], S.st, (v) => { S.st = v; S.div = 1; WM.refresh(w.id); }));
+        if (S.tab !== 'national') controls.appendChild(seg(World.STATES.map((k) => ({ value: k, label: World.stateName(k) })), S.st, (v) => { S.st = v; S.div = 1; WM.refresh(w.id); }));
         if (S.tab === 'division') {
-          const divs = S.st === 'KY' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5, 6, 7];
+          const divs = World.divisions(S.st);
           controls.appendChild(seg(divs.map((d) => ({ value: d, label: World.divShort({ state: S.st, division: d }) })), Number(S.div), (v) => { S.div = v; WM.refresh(w.id); }));
         }
         controls.appendChild(h('div', { class: 'grow' }));
@@ -155,7 +155,7 @@
           !past && snap === snaps[snaps.length - 1] ? { key: 'mov', label: 'Margin', render: (r) => (r.s.mov > 0 ? '+' : '') + r.s.mov.toFixed(1), cls: 'num r muted' } : null,
         ].filter(Boolean), list.slice(0, limit), { rowClass: (r) => (r.s.isUser ? 'me' : ''), onRow: (r) => Win.school(r.s.id) }));
         if (limit < list.length) body.appendChild(h('div', { class: 'row mt', style: { justifyContent: 'center' } }, h('button', { type: 'button', class: 'btn sm', onclick: () => { S.all = true; WM.refresh(w.id); } }, 'Show all ' + list.length)));
-        body.appendChild(h('p', { class: 'help' }, 'Power ratings update after every week. Each game counts its margin of victory (capped at 24), the opponent\u2019s rating and a bonus for winning, so wins, losses, margin, strength of schedule and opponent quality all matter. The preseason rating comes from each roster and fades as games are played. National rankings include every state in the game (Ohio and Kentucky for now).'));
+        body.appendChild(h('p', { class: 'help' }, 'Power ratings update after every week. Each game counts its margin of victory (capped at 24), the opponent\u2019s rating and a bonus for winning, so wins, losses, margin, strength of schedule and opponent quality all matter. The preseason rating comes from each roster and fades as games are played. National rankings include every state in the game (Ohio, Kentucky and Tennessee for now).'));
       },
     });
   };
@@ -193,7 +193,7 @@
         const S = w.state;
         if (!S.div) S.div = u.state === 'OH' ? u.division : 1;
         if (!S.view) S.view = String(u.state === 'OH' ? u.region : 1);
-        if (u.state !== 'OH') body.appendChild(h('div', { class: 'card tight mb' }, h('span', { class: 'bold' }, 'Ohio (OHSAA) brackets. '), h('span', { class: 'small muted' }, 'Kentucky\u2019s KHSAA playoff format is not in the game yet; Kentucky seasons end after Week 10.')));
+        if (u.state !== 'OH') body.appendChild(h('div', { class: 'card tight mb' }, h('span', { class: 'bold' }, 'Ohio (OHSAA) brackets. '), h('span', { class: 'small muted' }, 'Kentucky (KHSAA) and Tennessee (TSSAA) playoff formats are not in the game yet; their seasons end after Week 10.')));
         const divSeg = seg([1, 2, 3, 4, 5, 6, 7].map((d) => ({ value: d, label: 'Div ' + U.roman(d) })), S.div, (v) => {
           S.div = v;
           S.view = String((v - 1) * 4 + 1);

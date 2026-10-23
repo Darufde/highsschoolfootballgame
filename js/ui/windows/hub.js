@@ -43,7 +43,7 @@
       h('div', { class: 'small', style: { margin: '6px 0' } }, rankLine(st, s)),
       h('div', { class: 'tiny muted bold' }, 'TOP RECRUITS'),
       recruits.length ? recruits.map((x) => h('div', { class: 'small', style: { marginTop: '3px' } },
-        FNG.UI.stars(x.info.stars), ' ', h('button', { type: 'button', class: 'linklike', onclick: () => open(x.p) }, FNG.Players.shortName(x.p)), ' ' + x.p.pos + ' · #' + x.info.rank + ' \u2019' + String(x.info.classYear).slice(2)))
+        FNG.UI.stars(x.info.stars), ' ', h('button', { type: 'button', class: 'linklike', onclick: () => open(x.p) }, FNG.Players.shortName(x.p)), ' ' + x.p.pos + ' · #' + x.info.rank + ' \u2019' + String(x.info.classYear).slice(2) + (x.info.offers.length ? ' · ' + x.info.offers.length + ' offers' : '')))
         : h('div', { class: 'small dim' }, 'No ranked recruits'));
   }
 
@@ -63,7 +63,7 @@
     card.appendChild(h('div', { class: 'row between' }, h('h3', { class: 'sect', style: { margin: 0 } }, label), h('span', { class: 'small muted' }, App.dateLabel(st))));
     if (!g) {
       if (st.phase === 'playoffs' && !Season.userAlive(st)) {
-        const why = u.state === 'KY' ? 'Your regular season is complete. Kentucky’s KHSAA playoffs are not in the game yet.' : u.rec.seed ? 'Your season is over (' + u.rec.result + ').' : 'You did not qualify for the playoffs this year.';
+        const why = u.state !== 'OH' ? 'Your regular season is complete. ' + World.stateName(u.state) + '’s ' + (u.state === 'KY' ? 'KHSAA' : 'TSSAA') + ' playoffs are not in the game yet.' : u.rec.seed ? 'Your season is over (' + u.rec.result + ').' : 'You did not qualify for the playoffs this year.';
         card.append(h('p', null, why),
           h('p', { class: 'muted small' }, 'Follow the Ohio brackets or jump ahead to the offseason.'),
           h('div', { class: 'row' },
@@ -77,8 +77,9 @@
     }
     const home = g.home === st.userId;
     const opp = Season.opponentOf(st, g, st.userId);
-    const lg = g.league ? h('span', { class: 'tag team' }, u.state === 'KY' ? 'District' : 'League') : g.playoff ? h('span', { class: 'tag gold' }, 'Playoffs') : h('span', { class: 'tag' }, 'Non-league');
+    const lg = g.league ? h('span', { class: 'tag team' }, World.leagueWord(u.state)) : g.playoff ? h('span', { class: 'tag gold' }, 'Playoffs') : h('span', { class: 'tag' }, 'Non-league');
     card.appendChild(h('div', { class: 'preview mt mb' }, teamPreview(st, u, false), h('div', { class: 'vs' }, g.neutral || home ? 'VS' : 'AT'), teamPreview(st, opp, true)));
+    card.appendChild(FNG.CollegeView.gameOffers(st, u, opp));
     card.appendChild(h('div', { class: 'row small muted mb' }, lg, h('span', null, g.neutral ? 'Neutral site' : home ? 'Home' : 'Away'), h('span', null, '· Forecast: ' + Season.gameWeather(g))));
     const us = Team.userRatings(st);
     const them = Season.scout(st, opp);
@@ -149,9 +150,9 @@
         const played = u.rec.w + u.rec.l > 0;
         const lgStand = Season.leagueStandings(st, lg.id);
         body.appendChild(h('div', { class: 'grid c4 mb' },
-          stat('Varsity Record', u.rec.w + '-' + u.rec.l, (oh ? 'League ' : 'District ') + u.rec.lw + '-' + u.rec.ll + (u.rec.streak ? ' · ' + u.rec.streak : '')),
+          stat('Varsity Record', u.rec.w + '-' + u.rec.l, World.leagueWord(u.state) + ' ' + u.rec.lw + '-' + u.rec.ll + (u.rec.streak ? ' · ' + u.rec.streak : '')),
           oh ? stat('Region ' + u.region, played ? '#' + u.cpRank : '—', played ? u.cp.toFixed(4) + ' computer pts' : 'Ratings begin after Week 1')
-            : stat(lg.name.replace(/^Class \S+ /, ''), u.rec.lw + u.rec.ll ? U.ordinal(lgStand.indexOf(u) + 1) : '—', u.rec.lw + u.rec.ll ? 'of ' + lgStand.length + ' in the district' : 'District games come late in the season'),
+            : stat(lg.name.replace(/^(Class|Division) \S+ /, ''), u.rec.lw + u.rec.ll ? U.ordinal(lgStand.indexOf(u) + 1) : '—', u.rec.lw + u.rec.ll ? 'of ' + lgStand.length + ' in the ' + World.leagueWord(u.state).toLowerCase() : World.leagueWord(u.state) + ' games come late in the season'),
           h('div', { class: 'card tight stat', style: { cursor: 'pointer' }, onclick: () => Win.rankings() }, h('div', { class: 'k' }, 'Team Rankings · ' + st.rankings.snaps[st.rankings.snaps.length - 1].label),
             h('div', { class: 'v' }, '#' + sta.rank + ' ', h('span', { class: 'small muted', style: { fontWeight: 500 } }, World.stateName(u.state)), ' ', FNG.RecruitView.moveTag(sta.prev ? sta.move : 0)),
             h('div', { class: 's' }, '#' + nat.rank + ' national · #' + dvr.rank + ' in ' + World.divShort(u))),

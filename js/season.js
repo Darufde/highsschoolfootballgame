@@ -5,9 +5,9 @@
 (function () {
   'use strict';
   const FNG = window.FNG;
-  const { RNG, U, Team, Players, Engine, Schedule, World, Coaches, Recruits, TeamRank } = FNG;
+  const { RNG, U, Team, Players, Engine, Schedule, World, Coaches, Recruits, TeamRank, Colleges } = FNG;
 
-  const SAVE_VERSION = 3;
+  const SAVE_VERSION = 4;
   const START_YEAR = 2026;
   const SIZE_ENROLL = { small: 240, medium: 600, large: 1200, xl: 2100 };
   const STATUS_PRESTIGE = { rebuild: 28, average: 50, established: 72 };
@@ -102,7 +102,7 @@
     for (const s of state.schools) if (!s.isUser) s.r = Team.aiRatings(s, aiRoster(state, s));
   }
 
-  // Any player in either state: { p, s } or null.
+  // Any player in any state: { p, s } or null.
   function findPlayer(state, id) {
     const u = user(state);
     const mine = state.roster.find((p) => p.id === id);
@@ -128,6 +128,7 @@
     const prev = {};
     if (state.recruits) for (const cy in state.recruits.classes) state.recruits.classes[cy].forEach((e, i) => (prev[e[0]] = i + 1));
     const classes = {};
+    const pool = [];
     for (const s of state.schools) {
       const roster = s.isUser ? state.roster : aiRoster(state, s);
       for (const p of roster) {
@@ -137,10 +138,137 @@
         if (sc < Recruits.MIN_SCORE) continue;
         const cy = Recruits.classYear(p, state.year);
         (classes[cy] = classes[cy] || []).push([p.id, sc, s.id]);
+        pool.push({ p, s, sc, cy });
       }
     }
     for (const cy in classes) classes[cy] = classes[cy].sort((a, b) => b[1] - a[1]).slice(0, Recruits.RANKED_PER_CLASS);
     state.recruits = { year: state.year, week: state.week, label, classes, prev };
+    updateColleges(state, pool);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* College recruiting: power conference offers, every week              */
+  /* ------------------------------------------------------------------ */
+  function collegeContext(state) {
+    const cr = state.cr;
+    const played = state.schools.filter((s) => s.rec && s.rec.gp);
+    cr.sosMean = played.length ? Math.round(U.avg(played.map((s) => s.sos || 0)) * 10) / 10 : 0;
+    cr.center = { lat: U.round1(U.avg(state.schools.map((s) => s.lat))), lon: U.round1(U.avg(state.schools.map((s) => s.lon))) };
+    cr.off = Colleges.offsets(state.recruits.classes, state.year);
+  }
+
+  function updateColleges(state, pool) {
+    if (!state.cr) state.cr = Colleges.init();
+    collegeContext(state);
+    const rank = rankIndex(state);
+    const progress = state.phase === 'regular' ? (state.week - 1) / 10 : 1;
+    const events = Colleges.update(state.cr, pool, {
+      year: state.year, week: state.week, progress, perf: state.perf, center: state.cr.center, sosMean: state.cr.sosMean,
+      rankOf: (id) => (rank[id] ? rank[id].rank : 0),
+    });
+    // News for the user's own players, one line per player.
+    const mine = {};
+    for (const ev of events) {
+      if (ev.kind !== 'offer') continue;
+      const p = state.roster.find((x) => x.id === ev.pid);
+      if (p) (mine[p.id] = mine[p.id] || { p, names: [] }).names.push(Colleges.get(ev.cid).name);
+    }
+    for (const id in mine) {
+      const { p, names } = mine[id];
+      const who = names.length <= 3 ? names.join(names.length === 2 ? ' and ' : ', ') : names.slice(0, 2).join(', ') + ' and ' + (names.length - 2) + ' others';
+      addNews(state, 'Recruiting: ' + who + (names.length > 1 ? ' offer ' : ' offers ') + Players.fullName(p) + ' (' + p.pos + ', class of ' + Recruits.classYear(p, state.year) + ').', 'big');
+    }
+  }
+
+  // What colleges see for one player (used for offers, interest and suitors on profiles).
+  function prospectMetrics(state, p, s) {
+    const e = rankIndex(state)[p.id];
+    const sc = e ? e.score : Recruits.score(p, s, state.perf[p.id]);
+    const cr = state.cr || Colleges.init();
+    return Colleges.metrics(p, s, sc, Recruits.classYear(p, state.year), state.year, e ? e.rank : 0, state.perf[p.id], cr.off, cr.sosMean);
+  }
+
+  // Power conference offers for a player: [{ college, year, week, interest }], most interested first.
+  function collegeOffers(state, p, s) {
+    if (!state.cr || !state.cr.offers[p.id]) return [];
+    if (!s) {
+      const f = findPlayer(state, p.id);
+      if (!f) return [];
+      s = f.s;
+    }
+    return Colleges.offersFor(state.cr, prospectMetrics(state, p, s));
+  }
+
+  // Colleges evaluating a player that have not offered yet.
+  function collegeSuitors(state, p, s, n) {
+    if (!state.cr) return [];
+    const progress = state.phase === 'regular' ? (state.week - 1) / 10 : 1;
+    return Colleges.suitors(state.cr, prospectMetrics(state, p, s), progress, n);
+  }
+
+  // A team's players holding power conference offers: [{ p, offers }], most offers first.
+  function offeredPlayers(state, s) {
+    if (!state.cr) return [];
+    const roster = s.isUser ? state.roster : aiRoster(state, s);
+    return roster.filter((p) => state.cr.offers[p.id]).map((p) => ({ p, offers: collegeOffers(state, p, s) }))
+      .filter((x) => x.offers.length).sort((a, b) => b.offers.length - a.offers.length || Players.ovr(b.p) - Players.ovr(a.p));
+  }
+
+  // Every current offer from one college: [{ p, s, year, week, interest, m }].
+  function collegeBoard(state, cid) {
+    if (!state.cr) return [];
+    const out = [];
+    for (const o of Colleges.offersBy(state.cr, cid)) {
+      const f = findPlayer(state, o.pid);
+      if (!f) continue;
+      const m = prospectMetrics(state, f.p, f.s);
+      out.push({ p: f.p, s: f.s, year: o.year, week: o.week, m, interest: Colleges.interest(Colleges.get(cid), m) });
+    }
+    return out;
+  }
+
+  // Ranked prospects a college is evaluating but has not offered, closest to an offer first.
+  function collegeTargets(state, cid, n) {
+    const c = Colleges.get(cid);
+    const R = state.recruits;
+    if (!R || !state.cr) return [];
+    const progress = state.phase === 'regular' ? (state.week - 1) / 10 : 1;
+    const out = [];
+    for (const cy in R.classes) {
+      for (const e of R.classes[cy]) {
+        const held = state.cr.offers[e[0]];
+        if (held && held.some((o) => o[0] === cid)) continue;
+        const f = findPlayer(state, e[0]);
+        if (!f) continue;
+        const m = prospectMetrics(state, f.p, f.s);
+        if (m.proj < Colleges.band(c) - 12) continue;
+        const gap = Colleges.evaluate(c, m, progress);
+        if (gap > -3) out.push({ p: f.p, s: f.s, m, gap, interest: Colleges.interest(c, m) });
+      }
+    }
+    return out.sort((a, b) => b.gap - a.gap).slice(0, n || 25);
+  }
+
+  // Signing day for every senior with a power conference offer. Returns { playerId: offer }.
+  function signSeniors(state) {
+    if (!state.cr) state.cr = Colleges.init();
+    const seniors = [];
+    for (const pid in state.cr.offers) {
+      const f = findPlayer(state, pid);
+      if (!f || f.p.year !== 4) continue;
+      seniors.push({ m: prospectMetrics(state, f.p, f.s), name: Players.fullName(f.p) });
+    }
+    return Colleges.sign(state.cr, seniors, state.year);
+  }
+
+  // At the start of a season, drop offers to players no longer on a varsity roster.
+  function pruneOffers(state) {
+    if (!state.cr) return;
+    for (const pid in state.cr.offers) {
+      if (findPlayer(state, pid)) continue;
+      delete state.cr.offers[pid];
+      if (state.cr.meta) delete state.cr.meta[pid];
+    }
   }
 
   function updateRankings(state, key, label) {
@@ -149,31 +277,40 @@
     updateRecruits(state, label);
   }
 
-  // Recruit standing for one player: national class rank, rating, stars, movement and offers.
+  // Index of ranked prospects: id -> { rank, score, cy }.
   const recruitIndex = new WeakMap();
-  function recruitInfo(state, p) {
+  function rankIndex(state) {
     const R = state.recruits;
-    if (!R) return null;
+    if (!R) return {};
     let idx = recruitIndex.get(R);
     if (!idx) {
       idx = {};
       for (const cy in R.classes) R.classes[cy].forEach((e, i) => (idx[e[0]] = { rank: i + 1, score: e[1], cy: Number(cy) }));
       recruitIndex.set(R, idx);
     }
-    const e = idx[p.id];
+    return idx;
+  }
+
+  // Recruit standing for one player: national class rank, rating, stars, movement and offers
+  // (power conference offers in `offers`, lower levels in `otherOffers`).
+  function recruitInfo(state, p, s) {
+    const R = state.recruits;
+    if (!R) return null;
+    const e = rankIndex(state)[p.id];
     if (!e) return null;
     const progress = state.phase === 'regular' ? (state.week - 1) / 10 : 1;
     return {
       rank: e.rank, score: e.score, classYear: e.cy, stars: Recruits.stars(e.rank),
       prev: R.prev[p.id] || 0, move: R.prev[p.id] ? R.prev[p.id] - e.rank : null,
-      offers: Recruits.offers(p, e.score, state.year, progress),
+      offers: collegeOffers(state, p, s),
+      otherOffers: Recruits.offers(p, e.score, state.year, progress),
     };
   }
 
   // Best rated recruits on a team (for game previews and school pages).
   function topRecruits(state, s, n) {
     const roster = s.isUser ? state.roster : aiRoster(state, s);
-    return roster.map((p) => ({ p, info: recruitInfo(state, p) })).filter((x) => x.info).sort((a, b) => b.info.score - a.info.score).slice(0, n || 3);
+    return roster.map((p) => ({ p, info: recruitInfo(state, p, s) })).filter((x) => x.info).sort((a, b) => b.info.score - a.info.score).slice(0, n || 3);
   }
 
   function teamStanding(state, s, scope, snapIndex) {
@@ -186,6 +323,7 @@
   }
 
   // Bring an older save up to date (school names keep their old spelling).
+  // Version 3 saves keep their Ohio/Kentucky world (Tennessee is for new programs) and gain college recruiting.
   function migrate(state) {
     if (state.version === 2) {
       state.version = 3;
@@ -194,6 +332,13 @@
       state.recruits = null;
       for (const s of state.schools) delete s.elo;
       updateRankings(state, 'CUR', state.phase === 'offseason' ? 'Final' : 'Current');
+    }
+    if (state.version === 3) {
+      state.version = 4;
+      for (const lg of state.leagues) if (lg.kind === 'district' && !lg.state) lg.state = 'KY';
+      state.cr = Colleges.init();
+      updateRecruits(state, state.recruits ? state.recruits.label : 'Current');
+      if (state.recruits) state.recruits.prev = {};
     }
     return state;
   }
@@ -241,7 +386,7 @@
       school: s,
       league: lg.name,
       leagueMates: lg.members.filter((id) => id !== s.id).map((id) => byId[id]),
-      groupSize: s.state === 'KY' ? sameState.filter((x) => x.division === s.division).length : sameState.filter((x) => x.region === s.region).length,
+      groupSize: s.state !== 'OH' ? sameState.filter((x) => x.division === s.division).length : sameState.filter((x) => x.region === s.region).length,
       sameCity: sameState.filter((x) => x.city === s.city && x.id !== s.id),
       nearby: world.schools
         .filter((x) => x.id !== s.id)
@@ -280,6 +425,7 @@
       perf: {},
       rankings: { snaps: [], finals: [] },
       recruits: null,
+      cr: Colleges.init(),
       settings: { autoSave: true },
       created: Date.now(),
     };
@@ -764,12 +910,12 @@
           const top = st[0];
           for (const s of st) if (s.rec.lw === top.rec.lw && s.rec.ll === top.rec.ll) s.rec.leagueChamp = true;
         }
-        for (const s of state.schools) if (s.state === 'KY') s.rec.result = s.rec.leagueChamp ? 'District Champion' : 'Season complete';
+        for (const s of state.schools) if (s.state !== 'OH') s.rec.result = s.rec.leagueChamp ? World.leagueWord(s.state) + ' Champion' : 'Season complete';
         if (u.rec.leagueChamp) {
           state.coach.leagueTitles++;
           addNews(state, u.name + ' clinches a share of the ' + league(state, u.leagueId).name + ' title!', 'big');
         }
-        if (u.state === 'KY') addNews(state, u.name + ' finishes the regular season ' + u.rec.w + '-' + u.rec.l + '. Kentucky’s KHSAA playoff format is not in the game yet, so the season ends here.', 'big');
+        if (u.state !== 'OH') addNews(state, u.name + ' finishes the regular season ' + u.rec.w + '-' + u.rec.l + '. ' + World.stateName(u.state) + '’s ' + (u.state === 'KY' ? 'KHSAA' : 'TSSAA') + ' playoff format is not in the game yet, so the season ends here.', 'big');
         state.phase = 'playoffs';
         state.week = 11;
         setupPlayoffs(state);
@@ -792,7 +938,7 @@
   /* Offseason                                                           */
   /* ------------------------------------------------------------------ */
   function seasonSummary(s) {
-    if (s.state === 'KY') return s.rec.leagueChamp ? 'District Champion' : 'Season complete';
+    if (s.state !== 'OH') return s.rec.leagueChamp ? World.leagueWord(s.state) + ' Champion' : 'Season complete';
     if (s.rec.result === 'State Champion') return 'State Champion';
     if (s.rec.result) return s.rec.result;
     return s.rec.seed ? 'Playoffs' : 'Missed playoffs';
@@ -844,7 +990,12 @@
         return { week: g.week, opp: opp.name, home, neutral: !!g.neutral, us: home ? g.hs : g.as, them: home ? g.as : g.hs, ot: g.ot, round: g.playoff ? g.playoff.round : 0 };
       }),
     });
-    state.offseason = { step: 0, awards, graduates: [], development: [], incoming: [], departures: [], promoted: 0, staffChanges: [], budgetAdded: 0, payroll: 0 };
+    const offerCounts = {};
+    for (const p of state.roster) if (p.year === 4 && state.cr && state.cr.offers[p.id]) offerCounts[p.id] = state.cr.offers[p.id].length;
+    const signings = signSeniors(state);
+    const mine = {};
+    for (const p of state.roster) if (signings[p.id]) mine[p.id] = signings[p.id];
+    state.offseason = { step: 0, awards, graduates: [], development: [], incoming: [], departures: [], promoted: 0, staffChanges: [], budgetAdded: 0, payroll: 0, signings: mine, offerCounts };
     addNews(state, 'The ' + state.year + ' season is complete. ' + u.name + ' finished ' + u.rec.w + '-' + u.rec.l + ' (' + seasonSummary(u) + ').', 'big');
   }
 
@@ -859,10 +1010,11 @@
       // Graduation, with where each senior projects at the next level.
       const seniors = state.roster.filter((p) => p.year === 4);
       O.graduates = seniors.map((p) => {
-        const info = recruitInfo(state, p);
+        const info = recruitInfo(state, p, u);
         const sc = info ? info.score : Recruits.score(p, u, state.perf[p.id]);
-        const c = Recruits.commitment(p, sc, state.year);
-        return { id: p.id, name: Players.fullName(p), pos: p.pos, ovr: Players.ovr(p), pot: p.pot, rank: info ? info.rank : 0, stars: info ? info.stars : 0, outlook: c.label, college: c.name, tier: c.tier, honors: p.honors.slice(-2) };
+        const pick = (O.signings || {})[p.id];
+        const c = pick ? { name: pick.college.name, tier: 5, label: 'Signed with ' + pick.college.name + ' (' + Colleges.confName(pick.college.conf) + ')', cid: pick.college.id } : Recruits.commitment(p, sc, state.year);
+        return { cid: c.cid || null, offers: (O.offerCounts || {})[p.id] || 0, id: p.id, name: Players.fullName(p), pos: p.pos, ovr: Players.ovr(p), pot: p.pot, rank: info ? info.rank : 0, stars: info ? info.stars : 0, outlook: c.label, college: c.name, tier: c.tier, honors: p.honors.slice(-2) };
       });
       const signed = O.graduates.filter((g) => g.tier >= 3);
       state.coach.prospects += signed.length;
@@ -959,6 +1111,7 @@
       }
     }
     refreshAIRatings(state);
+    pruneOffers(state);
     Players.fixLevels(state.roster);
     state.depth = Team.autoDepth(state.roster, state.depth);
     const u = user(state);
@@ -1054,6 +1207,7 @@
     SAVE_VERSION, START_YEAR, ROUND_NAMES, FACILITIES, FOCUS, OFFSEASON_STEPS, SIZE_ENROLL, STATUS_PRESTIGE,
     school, user, league, addNews, preview, newGame, weekGames, userGame, userSchedule, opponentOf, gameWeather,
     simGame, advanceWeek, computeRatings, regionStandings, leagueStandings, aiRoster, findPlayer, recruitInfo, topRecruits,
+    collegeOffers, collegeSuitors, offeredPlayers, collegeBoard, collegeTargets, prospectMetrics,
     teamStanding, latestSnap, migrate,
     userAlive, offseasonNext, upgradeCost, upgrade, scout, phaseLabel, budget, isUserGame, seasonSummary,
     setLevel, autoLevels, hire, fire, hireCost, marketFor,

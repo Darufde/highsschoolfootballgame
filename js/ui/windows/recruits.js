@@ -21,10 +21,11 @@
     return 'Class of ' + cy + ' (' + (['', 'Freshmen', 'Sophomores', 'Juniors', 'Seniors'][grade] || '') + ')';
   }
 
+  // Power conference offers (count and logos); lower-level offers show as a count when there are none.
   function offersCell(info) {
-    if (!info.offers.length) return h('span', { class: 'dim' }, '—');
-    const top = info.offers[0];
-    return h('span', { title: info.offers.map((o) => o.name).join(', ') }, h('b', null, info.offers.length), ' · ' + top.name + (info.offers.length > 1 ? ' +' + (info.offers.length - 1) : ''));
+    if (info.offers.length) return FNG.CollegeView.offersCell(info.offers, 4);
+    if (info.otherOffers.length) return h('span', { class: 'small muted', title: info.otherOffers.map((o) => o.name).join(', ') }, info.otherOffers.length + ' other');
+    return h('span', { class: 'dim' }, '—');
   }
 
   function openPlayer(st, p) {
@@ -37,7 +38,7 @@
       title: 'Recruit Rankings',
       icon: 'star',
       wide: true,
-      state: { cy: null, st: 'all', pos: 'ALL', team: 'all' },
+      state: { cy: null, st: 'all', pos: 'ALL', team: 'all', off: 'all' },
       render(body, w) {
         const st = App.state;
         const S = w.state;
@@ -67,13 +68,15 @@
           stateRank[r.p.id] = sc[r.s.state];
         }
         const teams = [...new Set(all.map((r) => r.s))].sort((a, b) => a.name.localeCompare(b.name));
-        let rows = all.filter((r) => (S.st === 'all' || r.s.state === S.st) && (S.pos === 'ALL' || r.p.pos === S.pos) && (S.team === 'all' || r.s.id === S.team));
+        const offered = (r) => !!(st.cr && st.cr.offers[r.p.id]);
+        let rows = all.filter((r) => (S.st === 'all' || r.s.state === S.st) && (S.pos === 'ALL' || r.p.pos === S.pos) && (S.team === 'all' || r.s.id === S.team) && (S.off === 'all' || (S.off === 'offered') === offered(r)));
 
         body.appendChild(h('p', { class: 'muted small', style: { marginTop: 0 } },
-          'Rankings as of ' + R.label + ' ' + R.year + '. Prospects are rated on ability, career ceiling, size and speed for the position, production this season and level of competition. The top ' + Recruits.RANKED_PER_CLASS + ' in each class are ranked; stars come from national rank (5★ top 3, 4★ top 25, 3★ top 100).'));
+          'Rankings as of ' + R.label + ' ' + R.year + '. Prospects are rated on ability, career ceiling, size and speed for the position, production this season and level of competition. The top ' + Recruits.RANKED_PER_CLASS + ' in each class are ranked; stars come from national rank (5★ top 3, 4★ top 25, 3★ top 100). Offers are from power conference programs (logos open each college\u2019s recruiting page).'));
         body.appendChild(h('div', { class: 'toolbar' }, seg(years.map((y) => ({ value: y, label: classLabel(st, y) })), S.cy, (v) => { S.cy = v; S.team = 'all'; WM.refresh(w.id); })));
         body.appendChild(h('div', { class: 'toolbar' },
-          select([{ value: 'all', label: 'Ohio & Kentucky' }, { value: 'OH', label: 'Ohio' }, { value: 'KY', label: 'Kentucky' }], S.st, (v) => { S.st = v; WM.refresh(w.id); }),
+          select([{ value: 'all', label: 'All states' }].concat(World.STATES.map((k) => ({ value: k, label: World.stateName(k) }))), S.st, (v) => { S.st = v; WM.refresh(w.id); }),
+          select([{ value: 'all', label: 'Any offers' }, { value: 'offered', label: 'Has power offers' }, { value: 'none', label: 'No power offers' }], S.off, (v) => { S.off = v; WM.refresh(w.id); }),
           select([{ value: 'ALL', label: 'All positions' }].concat(Players.POSITIONS.map((p) => ({ value: p, label: Players.POS_NAME[p] }))), S.pos, (v) => { S.pos = v; WM.refresh(w.id); }),
           select([{ value: 'all', label: 'All teams' }, { value: st.userId, label: '★ ' + Season.user(st).name }].concat(teams.filter((t) => !t.isUser).map((t) => ({ value: t.id, label: t.name + ' (' + t.state + ')' }))), S.team, (v) => { S.team = v; WM.refresh(w.id); }),
           h('div', { class: 'grow' }),
@@ -91,7 +94,7 @@
           { key: 'stars', label: 'Stars', render: (r) => stars(Recruits.stars(r.rank)) },
           { key: 'sc', label: 'Rating', render: (r) => h('b', { class: 'num' }, r.score.toFixed(1)), cls: 'r' },
           { key: 'stat', label: 'This Season', render: (r) => Recruits.statLine(r.p, st.perf[r.p.id]) || h('span', { class: 'dim' }, '—'), cls: 'muted' },
-          { key: 'off', label: 'Offers', render: (r) => offersCell(Season.recruitInfo(st, r.p)) },
+          { key: 'off', label: 'Offers', render: (r) => offersCell(Season.recruitInfo(st, r.p, r.s)) },
         ].filter(Boolean);
         body.appendChild(table(cols, rows, { rowClass: (r) => (r.s.isUser ? 'me' : ''), empty: 'No ranked prospects match these filters.' }));
       },
@@ -111,7 +114,7 @@
           return;
         }
         const { p, s } = f;
-        const info = Season.recruitInfo(st, p);
+        const info = Season.recruitInfo(st, p, s);
         WM.setTitle(w.id, Players.fullName(p));
         const cy = Recruits.classYear(p, st.year);
         body.appendChild(h('div', { class: 'hero' },
@@ -130,7 +133,8 @@
               h('dt', null, 'National rank'), h('dd', null, '#' + info.rank + ' in the class of ' + info.classYear),
               h('dt', null, 'Movement'), h('dd', null, info.prev ? 'Was #' + info.prev + ' ' : 'Newly ranked ', moveTag(info.move)),
               h('dt', null, 'This season'), h('dd', null, Recruits.statLine(p, st.perf[p.id]) || '—'),
-              h('dt', null, 'Offers'), h('dd', { style: { whiteSpace: 'normal' } }, info.offers.length ? info.offers.map((o) => o.name).join(', ') : 'None yet')) : h('p', { class: 'muted small' }, 'Not currently ranked in the class of ' + cy + '.')),
+              h('dt', null, 'Offers'), h('dd', null, info.offers.length ? FNG.CollegeView.logoStrip(info.offers, 12) : 'No power conference offers yet')) : h('p', { class: 'muted small' }, 'Not currently ranked in the class of ' + cy + '.')),
+          FNG.CollegeView.offersCard(st, p, s),
           h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Scouting'), h('dl', { class: 'kv' },
             h('dt', null, 'Overall'), h('dd', null, film ? ovrChip(Players.ovr(p)) : '?'),
             h('dt', null, 'Ceiling'), h('dd', null, stars(Players.potentialStars(p))),

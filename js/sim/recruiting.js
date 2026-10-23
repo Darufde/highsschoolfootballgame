@@ -11,7 +11,7 @@
   const { RNG, U } = FNG;
   const P = FNG.Players;
 
-  const RANKED_PER_CLASS = 250;
+  const RANKED_PER_CLASS = 300;
   const MIN_SCORE = 38; // below this a player isn't evaluated at all
 
   // Ideal size by position: [height inches, weight lbs]
@@ -22,12 +22,12 @@
   // Expected production points per game for a solid starter.
   const EXPECTED = { QB: 14, RB: 9, WR: 6, TE: 4, DL: 3, LB: 5, CB: 2.5, S: 3.5, K: 5 };
 
+  // Programs below the power conferences. Power conference offers come from FNG.Colleges.
   const COLLEGES = {
-    5: ['Ohio State', 'Michigan', 'Penn State', 'Notre Dame', 'Kentucky', 'Louisville', 'Tennessee', 'Indiana', 'Purdue', 'Michigan State', 'West Virginia', 'Pittsburgh', 'Wisconsin', 'Cincinnati'],
-    4: ['Toledo', 'Bowling Green', 'Kent State', 'Akron', 'Ohio', 'Miami (OH)', 'Marshall', 'Western Kentucky', 'Ball State', 'Central Michigan', 'Eastern Michigan', 'Buffalo'],
-    3: ['Youngstown State', 'Dayton', 'Eastern Kentucky', 'Murray State', 'Morehead State', 'Austin Peay', 'Eastern Illinois', 'Southeast Missouri', 'Duquesne', 'Robert Morris'],
-    2: ['Ashland', 'Findlay', 'Tiffin', 'Walsh', 'Kentucky Wesleyan', 'Lake Erie', 'Ohio Dominican', 'Hillsdale', 'Grand Valley State', 'Kentucky State', 'Central State'],
-    1: ['Mount Union', 'Wittenberg', 'Ohio Wesleyan', 'Denison', 'Kenyon', 'Capital', 'Otterbein', 'Heidelberg', 'Baldwin Wallace', 'Marietta', 'Muskingum', 'Georgetown (KY)', 'Campbellsville', 'Thomas More', 'Centre', 'Pikeville'],
+    4: ['Toledo', 'Bowling Green', 'Kent State', 'Akron', 'Ohio', 'Miami (OH)', 'Marshall', 'Western Kentucky', 'Ball State', 'Central Michigan', 'Eastern Michigan', 'Buffalo', 'Memphis', 'Middle Tennessee'],
+    3: ['Youngstown State', 'Dayton', 'Eastern Kentucky', 'Murray State', 'Morehead State', 'Austin Peay', 'Eastern Illinois', 'Southeast Missouri', 'Duquesne', 'Robert Morris', 'Chattanooga', 'East Tennessee State', 'Tennessee Tech', 'UT Martin', 'Tennessee State'],
+    2: ['Ashland', 'Findlay', 'Tiffin', 'Walsh', 'Kentucky Wesleyan', 'Lake Erie', 'Ohio Dominican', 'Hillsdale', 'Grand Valley State', 'Kentucky State', 'Central State', 'Carson-Newman', 'Tusculum', 'Lincoln Memorial'],
+    1: ['Mount Union', 'Wittenberg', 'Ohio Wesleyan', 'Denison', 'Kenyon', 'Capital', 'Otterbein', 'Heidelberg', 'Baldwin Wallace', 'Marietta', 'Muskingum', 'Georgetown (KY)', 'Campbellsville', 'Thomas More', 'Centre', 'Pikeville', 'Sewanee', 'Maryville (TN)', 'Cumberland', 'Bethel (TN)', 'Bryan', 'Tennessee Wesleyan'],
   };
   const TIER_NAME = { 5: 'Power Conference (FBS)', 4: 'FBS', 3: 'FCS', 2: 'Division II', 1: 'Division III / NAIA' };
 
@@ -63,11 +63,14 @@
       (s.recTD || 0) * 6 + (s.rec || 0) * 0.5 + (s.tkl || 0) + (s.sck || 0) * 3 + (s.dInt || 0) * 4 + (s.fgm || 0) * 3 + (s.xpm || 0);
   }
 
-  // perf entry: [games, points, yards, touchdowns, tackles, sacks, interceptions]
+  // perf entry: [games, points, yards, touchdowns, tackles, sacks, interceptions, recent form]
+  // Recent form is a running average that weights the latest game most.
   function addGame(store, s) {
-    const e = store[s.id] || (store[s.id] = [0, 0, 0, 0, 0, 0, 0]);
+    const e = store[s.id] || (store[s.id] = [0, 0, 0, 0, 0, 0, 0, 0]);
+    const pts = gamePoints(s);
+    e[7] = Math.round((e[0] ? (e[7] || 0) * 0.5 + pts * 0.5 : pts) * 10) / 10;
     e[0]++;
-    e[1] = Math.round((e[1] + gamePoints(s)) * 10) / 10;
+    e[1] = Math.round((e[1] + pts) * 10) / 10;
     e[2] += (s.pYds || 0) + (s.rYds || 0) + (s.recYds || 0);
     e[3] += (s.pTD || 0) + (s.rTD || 0) + (s.recTD || 0);
     e[4] += s.tkl || 0;
@@ -87,6 +90,12 @@
     return U.clamp((ratio - 1) * 4, -4, 7) * Math.min(1, perf[0] / 5);
   }
 
+  // Recent performance: the last few games against what a solid starter produces.
+  function recent(p, perf) {
+    if (!perf || perf[0] < 2 || perf[7] == null || !EXPECTED[p.pos]) return 0;
+    return U.clamp((perf[7] / EXPECTED[p.pos] - 1) * 2.5, -2, 3);
+  }
+
   function score(p, school, perf) {
     return Math.round((baseScore(p, school) + production(p, perf, school)) * 10) / 10;
   }
@@ -104,8 +113,9 @@
     return 0;
   }
 
-  // College offers come from the best level a player can reach and the one below it. Lists are
-  // stable per player, so as the season goes on offers accumulate (unless the rating drops).
+  // Offers from below the power conferences: the best level a player can reach and the one below it
+  // (just the level below for power conference prospects). Lists are stable per player, so offers
+  // accumulate as the season goes on unless the rating drops.
   function offers(p, sc, seasonYear, progress) {
     const cls = U.clamp(classYear(p, seasonYear) - seasonYear - 1, 0, 3); // 0 = senior
     const classFactor = [1, 0.75, 0.35, 0.12][cls];
@@ -113,7 +123,7 @@
     const top = bestTier(sc);
     const out = [];
     for (const tier of [top, top - 1]) {
-      if (tier < 1) continue;
+      if (tier < 1 || tier > 4) continue;
       const raw = tier === top ? 1 + (sc - OFFER_AT[tier]) * 1.3 : 3 + (sc - OFFER_AT[top]) * 1.5;
       const n = Math.min(COLLEGES[tier].length, Math.floor(Math.max(0, raw) * classFactor * prog));
       if (!n) continue;
@@ -123,7 +133,7 @@
     return out;
   }
 
-  // Where a senior signs: the best offer, or a projection when nobody offered.
+  // Where a senior signs without a power conference offer: the best other offer, or a projection.
   function commitment(p, sc, seasonYear) {
     const list = offers(p, sc, seasonYear, 1);
     if (list.length) return { name: list[0].name, tier: list[0].tier, label: 'Signed with ' + list[0].name + ' (' + TIER_NAME[list[0].tier] + ')' };
@@ -140,6 +150,6 @@
 
   FNG.Recruits = {
     RANKED_PER_CLASS, MIN_SCORE, COLLEGES, TIER_NAME, OFFER_AT, bestTier,
-    classYear, physical, competition, baseScore, gamePoints, addGame, production, score, stars, offers, commitment, statLine,
+    classYear, physical, competition, baseScore, gamePoints, addGame, production, recent, score, stars, offers, commitment, statLine,
   };
 })();

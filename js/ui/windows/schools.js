@@ -1,4 +1,4 @@
-/* Ohio schools directory and school profile windows. */
+/* Schools directory and school profile windows. */
 (function () {
   'use strict';
   const FNG = window.FNG;
@@ -45,9 +45,9 @@
         };
         const search = h('input', { class: 'input', placeholder: 'Search by school, city or county…', value: S.q, style: { width: '260px' }, oninput: (e) => { S.q = e.target.value; draw(); } });
         body.appendChild(h('div', { class: 'toolbar' }, search,
-          select([{ value: 'all', label: 'Ohio & Kentucky' }, { value: 'OH', label: 'Ohio' }, { value: 'KY', label: 'Kentucky' }], S.st, (v) => { S.st = v; S.div = '0'; S.county = 'all'; WM.refresh(w.id); }),
+          select([{ value: 'all', label: 'All states' }].concat(World.STATES.map((k) => ({ value: k, label: World.stateName(k) }))), S.st, (v) => { S.st = v; S.div = '0'; S.county = 'all'; WM.refresh(w.id); }),
           select([{ value: 'all', label: 'All types' }, { value: 'public', label: 'Public' }, { value: 'private', label: 'Private' }], S.type, (v) => { S.type = v; draw(); }),
-          S.st === 'all' ? null : select([{ value: '0', label: S.st === 'KY' ? 'All classes' : 'All divisions' }].concat((S.st === 'KY' ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5, 6, 7]).map((d) => ({ value: String(d), label: World.divLabel({ state: S.st, division: d }) }))), S.div, (v) => { S.div = v; draw(); }),
+          S.st === 'all' ? null : select([{ value: '0', label: S.st === 'OH' ? 'All divisions' : 'All classes' }].concat(World.divisions(S.st).map((d) => ({ value: String(d), label: World.divLabel({ state: S.st, division: d }) }))), S.div, (v) => { S.div = v; draw(); }),
           select([{ value: 'all', label: 'All counties' }].concat(counties.map((c) => ({ value: c, label: c + ' County' }))), S.county, (v) => { S.county = v; draw(); }),
           h('div', { class: 'grow' }), count));
         body.appendChild(results);
@@ -85,7 +85,7 @@
             h('div', { class: 'meta' }, World.divLabel(s) + (s.region ? ' · ' + World.groupLabel(s) : '') + ' · ' + lg.name)),
           h('div', { class: 'right', style: { position: 'relative', zIndex: 1 } }, h('div', { style: { fontSize: '26px', fontWeight: 800 } }, s.rec.w + '-' + s.rec.l), h('div', { class: 'small', style: { color: 'rgba(255,255,255,.75)' } }, '#' + sta.rank + ' ' + World.stateName(s.state) + ' · #' + nat.rank + ' national · #' + dvr.rank + ' ' + World.divShort(s)))));
 
-        body.appendChild(tabs([{ value: 'overview', label: 'Overview' }, { value: 'roster', label: 'Varsity Roster' }, { value: 'schedule', label: 'Schedule' }, { value: 'history', label: 'History' }, { value: 'league', label: s.state === 'KY' ? 'District' : 'League' }], w.state.tab, (v) => { w.state.tab = v; WM.refresh(w.id); }));
+        body.appendChild(tabs([{ value: 'overview', label: 'Overview' }, { value: 'roster', label: 'Varsity Roster' }, { value: 'schedule', label: 'Schedule' }, { value: 'history', label: 'History' }, { value: 'league', label: World.leagueWord(s.state) }], w.state.tab, (v) => { w.state.tab = v; WM.refresh(w.id); }));
         const T = w.state.tab;
         if (T === 'overview') {
           const info = h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Profile'), h('dl', { class: 'kv' },
@@ -102,7 +102,7 @@
           const r = s.isUser ? Team.userRatings(st) : Season.scout(st, s);
           const recs = Season.topRecruits(st, s, 6);
           const recCard = h('div', { class: 'card' }, h('div', { class: 'row between' }, h('h3', { class: 'sect', style: { margin: 0 } }, 'Ranked Recruits'), recs.length ? h('button', { type: 'button', class: 'btn sm ghost', onclick: () => Win.recruits({ team: s.id }) }, 'Rankings') : null),
-            recs.length ? recs.map((x) => h('div', { class: 'small', style: { marginTop: '6px' } }, stars(x.info.stars), ' ', h('button', { type: 'button', class: 'linklike', onclick: () => (s.isUser ? Win.player(x.p.id) : Win.prospect(x.p.id)) }, Players.fullName(x.p)), ' · ' + x.p.pos + ' · #' + x.info.rank + ' class of ' + x.info.classYear + (x.info.offers.length ? ' · ' + x.info.offers.length + ' offers' : ''))) : h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'No ranked recruits.'));
+            recs.length ? recs.map((x) => h('div', { class: 'small', style: { marginTop: '6px' } }, stars(x.info.stars), ' ', h('button', { type: 'button', class: 'linklike', onclick: () => (s.isUser ? Win.player(x.p.id) : Win.prospect(x.p.id)) }, Players.fullName(x.p)), ' · ' + x.p.pos + ' · #' + x.info.rank + ' class of ' + x.info.classYear, x.info.offers.length ? h('div', { style: { marginTop: '2px' } }, FNG.CollegeView.logoStrip(x.info.offers, 10)) : null)) : h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'No ranked recruits.'));
           body.appendChild(h('div', { class: 'grid c2' }, h('div', { class: 'col' }, info, recCard), ratingBars(r, s.isUser ? 'Team Ratings' : 'Scouting Report' + (st.program.facilities.film < 4 ? ' (estimated)' : ''))));
         } else if (T === 'schedule') {
           const games = st.games.filter((g) => g.home === s.id || g.away === s.id).sort((a, b) => a.week - b.week);
@@ -126,7 +126,8 @@
             { key: 'p', label: 'Pos', render: (p) => p.pos },
             { key: 'y', label: 'Yr', render: (p) => Players.CLASS_NAME[p.year] },
             { key: 'o', label: 'Ovr', render: (p) => (scouted ? ovrChip(Players.ovr(p)) : h('span', { class: 'dim' }, '?')), cls: 'c' },
-            { key: 'r', label: 'Recruit', render: (p) => { const i = Season.recruitInfo(st, p); return i ? h('span', { class: 'nowrap' }, stars(i.stars), ' #' + i.rank + ' (' + i.classYear + ')') : h('span', { class: 'dim' }, '—'); } },
+            { key: 'r', label: 'Recruit', render: (p) => { const i = Season.recruitInfo(st, p, s); return i ? h('span', { class: 'nowrap' }, stars(i.stars), ' #' + i.rank + ' (' + i.classYear + ')') : h('span', { class: 'dim' }, '—'); } },
+            { key: 'off', label: 'Offers', render: (p) => FNG.CollegeView.offersCell(Season.collegeOffers(st, p, s), 5) },
           ], ro));
         } else if (T === 'history') {
           const titles = st.champions.filter((c) => c.id === s.id);
