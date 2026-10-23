@@ -137,6 +137,30 @@ The files are WebP images with a `.png` name, which every modern browser display
 | UTEP | `utep.png` |
 | Wyoming | `wyoming.png` |
 
+## Sun Belt
+
+| College | File |
+| --- | --- |
+| App State | `appalachian-state.png` |
+| Arkansas State | `arkansas-state.png` |
+| Coastal Carolina | `coastal-carolina.png` |
+| Georgia Southern | `georgia-southern.png` |
+| Georgia State | `georgia-state.png` |
+| James Madison | `james-madison.png` |
+| Louisiana | `louisiana.png` |
+| Marshall | `marshall.png` |
+| Old Dominion | `old-dominion.png` |
+| South Alabama | `south-alabama.png` |
+| Southern Miss | `southern-miss.png` |
+| Troy | `troy.png` |
+| UL Monroe | `louisiana-monroe.png` |
+
+## Conference USA
+
+| College | File |
+| --- | --- |
+| Louisiana Tech | `louisiana-tech.png` |
+
 ## Independent
 
 | College | File |

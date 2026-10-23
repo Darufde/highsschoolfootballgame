@@ -172,7 +172,7 @@
         for (const pid in (st.cr && st.cr.commits) || {}) commitsBy[st.cr.commits[pid][0]] = (commitsBy[st.cr.commits[pid][0]] || 0) + 1;
         const rows = Colleges.LIST.filter((c) => S.conf === 'all' || c.conf === S.conf).map((c) => ({ c, n: offerCounts(st, c.id), commits: commitsBy[c.id] || 0 }));
         body.appendChild(h('p', { class: 'muted small', style: { marginTop: 0 } },
-          'Every Big Ten, SEC, ACC, Big 12 and Pac-12 program in the game, plus Notre Dame, recruits the players in the game. Offers update every week from each player’s rating, position, statistics, recent games, potential, recruit ranking, level of competition and location. Prestige sets the level a college recruits at and how far it can reach; lower-prestige programs look harder at developing, local and overlooked players.'));
+          'Every college in the game recruits the players already in it, from the power conferences to the American, Mountain West, Sun Belt and Conference USA. Offers update every week from each player’s rating, position, statistics, recent games, potential, recruit ranking, level of competition and location. Prestige sets the level a college recruits at and how far it can reach; lower-prestige programs look harder at developing, local and overlooked players.'));
         body.appendChild(h('div', { class: 'toolbar' },
           seg([{ value: 'all', label: 'All' }].concat(FNG.DATA.conferences.map((c) => ({ value: c.id, label: c.id === 'IND' ? 'Notre Dame' : c.name }))), S.conf, (v) => { S.conf = v; WM.refresh(w.id); }),
           h('div', { class: 'grow' }),

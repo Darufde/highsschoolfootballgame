@@ -21,6 +21,8 @@
     { id: 'P12', name: 'Pac-12' },
     { id: 'AAC', name: 'American' },
     { id: 'MW', name: 'Mountain West' },
+    { id: 'SBC', name: 'Sun Belt' },
+    { id: 'CUSA', name: 'Conference USA' },
     { id: 'IND', name: 'Independent' },
   ];
 
@@ -124,6 +126,20 @@ hawaii|Hawaii|HAW|MW|Honolulu|HI|21.30|-157.82|#024731|#FFFFFF|45
 nevada|Nevada|NEV|MW|Reno|NV|39.54|-119.82|#003366|#807F84|42
 new-mexico|New Mexico|UNM|MW|Albuquerque|NM|35.08|-106.62|#BA0C2F|#63666A|40
 utep|UTEP|UTEP|MW|El Paso|TX|31.77|-106.50|#041E42|#FF8200|40
+james-madison|James Madison|JMU|SBC|Harrisonburg|VA|38.43|-78.87|#450084|#CBB677|54
+appalachian-state|App State|APP|SBC|Boone|NC|36.21|-81.68|#222222|#FFCC00|52
+marshall|Marshall|MRSH|SBC|Huntington|WV|38.42|-82.42|#00B140|#A2AAAD|47
+troy|Troy|TROY|SBC|Troy|AL|31.80|-85.96|#8A2432|#B3B5B8|46
+louisiana|Louisiana|UL|SBC|Lafayette|LA|30.21|-92.02|#CE181E|#0A0A0A|46
+coastal-carolina|Coastal Carolina|CCU|SBC|Conway|SC|33.79|-79.01|#006F71|#A27752|45
+georgia-southern|Georgia Southern|GASO|SBC|Statesboro|GA|32.42|-81.78|#011E41|#A3AAAE|44
+south-alabama|South Alabama|USA|SBC|Mobile|AL|30.70|-88.18|#00205B|#BF0D3E|44
+southern-miss|Southern Miss|USM|SBC|Hattiesburg|MS|31.33|-89.33|#000000|#FFAB00|42
+arkansas-state|Arkansas State|ARST|SBC|Jonesboro|AR|35.84|-90.68|#CC092F|#000000|40
+old-dominion|Old Dominion|ODU|SBC|Norfolk|VA|36.89|-76.31|#003865|#7C878E|40
+georgia-state|Georgia State|GAST|SBC|Atlanta|GA|33.75|-84.39|#0039A6|#C60C30|38
+louisiana-monroe|UL Monroe|ULM|SBC|Monroe|LA|32.53|-92.07|#840029|#BA9B37|32
+louisiana-tech|Louisiana Tech|LT|CUSA|Ruston|LA|32.53|-92.65|#002F8B|#E31B23|40
 notre-dame|Notre Dame|ND|IND|Notre Dame|IN|41.70|-86.24|#0C2340|#C99700|92
 `;
 
