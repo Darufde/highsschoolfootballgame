@@ -29,15 +29,16 @@
   const CONF_NAME = {};
   for (const c of FNG.DATA.conferences) CONF_NAME[c.id] = c.name;
 
-  const NEIGHBORS = {
-    OH: ['MI', 'IN', 'KY', 'WV', 'PA'],
-    KY: ['OH', 'IN', 'IL', 'MO', 'TN', 'VA', 'WV'],
-    TN: ['KY', 'VA', 'NC', 'GA', 'AL', 'MS', 'AR', 'MO'],
-    MI: ['OH', 'IN', 'WI'],
-    WV: ['OH', 'PA', 'MD', 'VA', 'KY'],
-  };
-  // Talent depth of each state's competition, on top of division size.
-  const STATE_DEPTH = { OH: 0.4, MI: 0.2, TN: 0, KY: -0.4, WV: -0.6 };
+  // States whose colleges count as nearby for a player, and how colleges rate each state's level of
+  // competition, both from the state registry.
+  function neighbors(st) {
+    const cfg = FNG.States.get(st);
+    return cfg ? cfg.neighbors : [];
+  }
+  function stateDepth(st) {
+    const cfg = FNG.States.get(st);
+    return cfg ? cfg.depth : 0;
+  }
   // Offers per position a college extends to one senior class (a national-sized board of ~275), before
   // scaling by how much it recruits the states in the game. Younger classes get a smaller share.
   const SLOTS = { QB: 18, RB: 27, WR: 39, TE: 18, OL: 45, DL: 42, LB: 27, CB: 30, S: 24, K: 4, P: 2 };
@@ -95,13 +96,13 @@
   // Home (2), neighboring (1) or distant (0) state, per college and player state.
   const REL = {};
   function relCode(c, st) {
-    const row = REL[st] || (REL[st] = LIST.map((x) => (x.state === st ? 2 : NEIGHBORS[st] && NEIGHBORS[st].includes(x.state) ? 1 : 0)));
+    const row = REL[st] || (REL[st] = LIST.map((x) => (x.state === st ? 2 : neighbors(st).includes(x.state) ? 1 : 0)));
     return row[c.i];
   }
 
   function relation(c, st) {
     if (c.state === st) return 'home';
-    return NEIGHBORS[st] && NEIGHBORS[st].includes(c.state) ? 'near' : 'far';
+    return neighbors(st).includes(c.state) ? 'near' : 'far';
   }
 
   // Geography from the college's side: home-state and nearby players are easier to land,
@@ -127,7 +128,7 @@
       potEdge,
       statsEdge: R.production(p, perf, s) * 0.5,
       recentEdge: R.recent(p, perf),
-      compEdge: sos + (STATE_DEPTH[s.state] || 0),
+      compEdge: sos + stateDepth(s.state),
     };
   }
 
@@ -451,7 +452,7 @@
   }
 
   FNG.Colleges = {
-    LIST, POOL_MIN, NEIGHBORS, get, init, band, reach, relation, metrics, value, interest, interestLabel, evaluate,
+    LIST, POOL_MIN, get, init, band, reach, relation, metrics, value, interest, interestLabel, evaluate,
     update, offsets, offersFor, suitors, sign, offersBy, commitOf, confName, share, slotsFor,
   };
 })();

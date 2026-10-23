@@ -80,7 +80,7 @@
           'Rankings as of ' + R.label + ' ' + R.year + '. Prospects are rated on ability, career ceiling, size and speed for the position, production this season and level of competition. The top ' + U.num(Recruits.RANKED_PER_CLASS) + ' in each class are ranked, and stars come from national rank: ' + [5, 4, 3, 2, 1].map((n) => U.num(Recruits.STAR_COUNTS[n]) + ' ' + n + '★').join(', ') + '. Offers are from the major college programs (logos open each college\u2019s recruiting page).'));
         body.appendChild(h('div', { class: 'toolbar' }, seg(years.map((y) => ({ value: y, label: classLabel(st, y) })), S.cy, (v) => { S.cy = v; S.team = 'all'; S.page = 0; WM.refresh(w.id); })));
         body.appendChild(h('div', { class: 'toolbar' },
-          select([{ value: 'all', label: 'All states' }].concat(World.STATES.map((k) => ({ value: k, label: World.stateName(k) }))), S.st, set('st')),
+          select([{ value: 'all', label: 'All states' }].concat(Season.states(st).map((k) => ({ value: k, label: World.stateName(k) }))), S.st, set('st')),
           select([{ value: 0, label: 'All stars' }].concat([5, 4, 3, 2, 1].map((n) => ({ value: n, label: n + '★ (' + U.num(Recruits.STAR_COUNTS[n]) + ')' }))), S.stars, (v) => set('stars')(Number(v))),
           select([{ value: 'all', label: 'Any offers' }, { value: 'offered', label: 'Has major offers' }, { value: 'none', label: 'No major offers' }], S.off, set('off')),
           select([{ value: 'ALL', label: 'All positions' }].concat(Players.POSITIONS.map((p) => ({ value: p, label: Players.POS_NAME[p] }))), S.pos, set('pos')),

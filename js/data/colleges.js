@@ -1,5 +1,5 @@
 /*
- * Colleges that recruit in the game: the Big Ten, SEC, ACC, Big 12, Pac-12 and American programs plus Notre
+ * Colleges that recruit in the game: the Big Ten, SEC, ACC, Big 12, Pac-12, American and Mountain West programs plus Notre
  * Dame, limited to the schools with a logo in assets/colleges/ (a college without a logo is not
  * in the game).
  *
@@ -20,6 +20,7 @@
     { id: 'B12', name: 'Big 12' },
     { id: 'P12', name: 'Pac-12' },
     { id: 'AAC', name: 'American' },
+    { id: 'MW', name: 'Mountain West' },
     { id: 'IND', name: 'Independent' },
   ];
 
@@ -50,6 +51,8 @@ oklahoma|Oklahoma|OU|SEC|Norman|OK|35.21|-97.44|#841617|#FDF9D8|86
 tennessee|Tennessee|TENN|SEC|Knoxville|TN|35.95|-83.93|#FF8200|#FFFFFF|85
 texas-am|Texas A&M|TAMU|SEC|College Station|TX|30.61|-96.34|#500000|#FFFFFF|85
 florida|Florida|UF|SEC|Gainesville|FL|29.65|-82.35|#0021A5|#FA4616|84
+lsu|LSU|LSU|SEC|Baton Rouge|LA|30.41|-91.18|#461D7C|#FDD023|89
+auburn|Auburn|AUB|SEC|Auburn|AL|32.60|-85.49|#0C2340|#E87722|81
 ole-miss|Ole Miss|MISS|SEC|Oxford|MS|34.36|-89.54|#CE1126|#14213D|82
 south-carolina|South Carolina|SC|SEC|Columbia|SC|34.00|-81.03|#73000A|#000000|74
 missouri|Missouri|MIZ|SEC|Columbia|MO|38.94|-92.33|#F1B82D|#000000|72
@@ -112,6 +115,15 @@ tulsa|Tulsa|TLSA|AAC|Tulsa|OK|36.15|-95.94|#002D72|#C8102E|43
 rice|Rice|RICE|AAC|Houston|TX|29.72|-95.40|#00205B|#C1C6C8|42
 temple|Temple|TEM|AAC|Philadelphia|PA|39.98|-75.16|#9D2235|#FFFFFF|40
 charlotte|Charlotte|CLT|AAC|Charlotte|NC|35.31|-80.74|#005035|#A49665|38
+unlv|UNLV|UNLV|MW|Las Vegas|NV|36.11|-115.14|#CF0A2C|#666666|52
+air-force|Air Force|AF|MW|Colorado Springs|CO|38.99|-104.86|#003087|#8A8D8F|52
+northern-illinois|Northern Illinois|NIU|MW|DeKalb|IL|41.93|-88.77|#BA0C2F|#000000|50
+wyoming|Wyoming|WYO|MW|Laramie|WY|41.31|-105.58|#492F24|#FFC425|48
+san-jose-state|San José State|SJSU|MW|San Jose|CA|37.34|-121.88|#0055A2|#E5A823|47
+hawaii|Hawaii|HAW|MW|Honolulu|HI|21.30|-157.82|#024731|#FFFFFF|45
+nevada|Nevada|NEV|MW|Reno|NV|39.54|-119.82|#003366|#807F84|42
+new-mexico|New Mexico|UNM|MW|Albuquerque|NM|35.08|-106.62|#BA0C2F|#63666A|40
+utep|UTEP|UTEP|MW|El Paso|TX|31.77|-106.50|#041E42|#FF8200|40
 notre-dame|Notre Dame|ND|IND|Notre Dame|IN|41.70|-86.24|#0C2340|#C99700|92
 `;
 

@@ -59,10 +59,14 @@
       type: 'public',
       size: 'auto',
       status: 'average',
+      scope: 'region',
       colors: [PRIMARY[7], SECONDARY[0]],
       suggest: 0,
     };
-    const existing = new Set(World.baseWorld().schools.map((s) => s.name.toLowerCase()));
+    // School names are unique within a state.
+    const taken = {};
+    for (const s of World.baseWorld().schools) (taken[s.state] = taken[s.state] || new Set()).add(s.name.toLowerCase());
+    const existing = { has: (n) => !!(taken[form.state] && taken[form.state].has(n)) };
     let previewTimer = null;
 
     WM.open('setup', {
@@ -95,6 +99,7 @@
           cityInput.value = '';
           cityInput.placeholder = 'Search ' + World.stateName(v) + ' cities and towns…';
           cityNote.textContent = cityList().length + ' ' + World.stateName(v) + ' communities available.';
+          drawScope();
           refreshPreview();
         });
         stateSel.style.width = '100%';
@@ -143,7 +148,7 @@
           }
         });
         left.appendChild(h('div', { class: 'grid c2' },
-          field('State', stateSel, 'Ohio, Michigan, Kentucky, West Virginia and Tennessee are playable.', 'state'),
+          field('State', stateSel, World.STATES.map(World.stateName).join(', ') + ' are playable.', 'state'),
           field('City', h('div', { class: 'combo' }, cityInput, list), null, 'city')));
         left.lastChild.lastChild.appendChild(cityNote);
 
@@ -178,7 +183,7 @@
           }, 'full'));
           typeHelp.textContent = form.type === 'public'
             ? 'Players come from your district. Smaller budget and rare transfers, but your classification is set by true enrollment.'
-            : 'Draws students from a wide area: yearly transfers and a bigger budget.' + (form.state === 'OH' ? ' Ohio\u2019s competitive balance counts your enrollment ×1.3, which can push you up a division.' : '');
+            : 'Draws students from a wide area: yearly transfers and a bigger budget.' + (FNG.States.get(form.state).classes.method === 'ohio' ? ' ' + World.stateName(form.state) + '\u2019s competitive balance counts your enrollment ×1.3, which can push you up a division.' : '');
         };
         drawType();
         left.appendChild(h('div', { class: 'field' }, h('label', { class: 'label' }, 'School Type'), typeBox, typeHelp));
@@ -196,8 +201,24 @@
           refreshPreview();
         }, 'full'));
         drawStatus();
-        left.appendChild(field('Enrollment', sizeSel, 'Sets your division (Ohio, Michigan) or class (Kentucky, West Virginia, Tennessee). Tennessee private schools of 250+ students play in Division II. Your program will have roughly 100-150 players.', 'size'));
+        left.appendChild(field('Enrollment', sizeSel, 'Sets your division or class. Your program will have roughly 100-150 players.', 'size'));
         left.appendChild(field('Program Tradition', statusBox, 'Sets starting talent, prestige and expectations.', 'status'));
+
+        // World size: which states are simulated alongside yours.
+        const scopeBox = h('div');
+        const scopeHelp = h('div', { class: 'help' });
+        const drawScope = () => {
+          scopeBox.replaceChildren(seg(World.SCOPES, form.scope, (v) => {
+            form.scope = v;
+            drawScope();
+            refreshPreview();
+          }, 'full'));
+          const keys = World.activeStates(form.state, form.scope);
+          const n = World.baseWorld().schools.filter((x) => keys.includes(x.state)).length;
+          scopeHelp.textContent = keys.map(World.stateName).join(', ') + ' · ' + U.num(n) + ' schools. Every school in these states plays a full season and every player is recruited; fewer states means faster weeks.';
+        };
+        drawScope();
+        left.appendChild(h('div', { class: 'field' }, h('label', { class: 'label' }, 'World'), scopeBox, scopeHelp));
 
         // Colors
         const colorsBox = h('div');
@@ -219,7 +240,7 @@
           const n = form.name.trim();
           if (!n) out.name = 'Name your school.';
           else if (n.length < 3) out.name = 'That name is too short.';
-          else if (existing.has(n.toLowerCase())) out.name = 'A school named "' + n + '" already exists.';
+          else if (existing.has(n.toLowerCase())) out.name = 'A school named "' + n + '" already exists in ' + World.stateName(form.state) + '.';
           return out;
         };
 
@@ -240,15 +261,16 @@
           if (form.city) {
             const pv = Season.preview(form);
             const s = pv.school;
-            const oh = s.state === 'OH';
+            const oh = !!s.region;
+            const factor = FNG.States.get(s.state).classes.method === 'ohio';
             card.appendChild(h('dl', { class: 'kv' },
               h('dt', null, 'County'), h('dd', null, s.county),
-              h('dt', null, 'Enrollment'), h('dd', null, U.num(s.enrollment) + ' students' + (oh && s.type === 'private' ? ' (counts as ' + U.num(World.adjustedEnrollment(s)) + ')' : '')),
+              h('dt', null, 'Enrollment'), h('dd', null, U.num(s.enrollment) + ' students' + (factor && s.type === 'private' ? ' (counts as ' + U.num(World.adjustedEnrollment(s)) + ')' : '')),
               h('dt', null, 'Program'), h('dd', null, '~' + FNG.Players.programTarget(s.enrollment) + ' players (varsity, JV, freshman)'),
               h('dt', null, oh ? 'Division' : 'Class'), h('dd', null, World.divLabel(s) + (oh ? '' : ' (' + pv.groupSize + ' schools)')),
               oh ? h('dt', null, 'Region') : null, oh ? h('dd', null, 'Region ' + s.region + ' · ' + World.regionName(s.region) + ' (' + pv.groupSize + ' schools)') : null,
               h('dt', null, World.leagueWord(s.state)), h('dd', null, pv.league),
-              h('dt', null, 'Playoffs'), h('dd', null, oh ? 'OHSAA format: top 16 per region' : World.assoc(s.state) + ' format not in the game yet')));
+              h('dt', null, 'Playoffs'), h('dd', null, World.hasPlayoffs(s.state) ? World.assoc(s.state) + ' format: top 16 per region' : World.assoc(s.state) + ' format not in the game yet')));
             card.appendChild(h('h3', { class: 'sect mt' }, World.leagueWord(s.state) + ' Opponents'));
             card.appendChild(h('div', { class: 'small', style: { lineHeight: 1.7 } }, pv.leagueMates.map((x) => x.name + ' (' + x.city + ')').join(' · ')));
             if (pv.sameCity.length) {
@@ -285,7 +307,7 @@
           if (App.hasSave() && !(await WM.confirm('Replace Save', 'Starting a new program replaces your current saved game. Continue?', 'Start New', true))) return;
           FNG.UI.busy(true, 'Building ' + World.stateName(form.state) + ' and its rivals\u2026', 50);
           setTimeout(() => {
-            const st = Season.newGame({ coach: form.coach, state: form.state, city: form.city, name: form.name, type: form.type, size: form.size, status: form.status, colors: form.colors.slice() });
+            const st = Season.newGame({ coach: form.coach, state: form.state, city: form.city, name: form.name, type: form.type, size: form.size, status: form.status, colors: form.colors.slice(), scope: form.scope });
             FNG.UI.busy(false);
             WM.close('setup', true);
             WM.close('title', true);

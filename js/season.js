@@ -102,6 +102,18 @@
     for (const s of state.schools) if (!s.isUser) s.r = Team.aiRatings(s, aiRoster(state, s));
   }
 
+  // States in this save's world, in registry order (a world can hold a subset of the registered states).
+  const statesCache = new WeakMap();
+  function states(state) {
+    let keys = statesCache.get(state.schools);
+    if (!keys) {
+      const present = new Set(state.schools.map((s) => s.state));
+      keys = World.STATES.filter((k) => present.has(k));
+      statesCache.set(state.schools, keys);
+    }
+    return keys;
+  }
+
   // Any player in any state: { p, s } or null.
   function findPlayer(state, id) {
     const u = user(state);
@@ -422,6 +434,8 @@
     const world = World.baseWorld();
     const s = makeUserSchool(setup);
     World.placeUserSchool(world, s);
+    const active = World.activeStates(s.state, setup.scope || 'region');
+    World.restrict(world, active);
     const lg = world.leagues.find((l) => l.id === s.leagueId);
     const byId = {};
     for (const x of world.schools) byId[x.id] = x;
@@ -430,7 +444,7 @@
       school: s,
       league: lg.name,
       leagueMates: lg.members.filter((id) => id !== s.id).map((id) => byId[id]),
-      groupSize: s.state !== 'OH' ? sameState.filter((x) => x.division === s.division).length : sameState.filter((x) => x.region === s.region).length,
+      groupSize: !s.region ? sameState.filter((x) => x.division === s.division).length : sameState.filter((x) => x.region === s.region).length,
       sameCity: sameState.filter((x) => x.city === s.city && x.id !== s.id),
       nearby: world.schools
         .filter((x) => x.id !== s.id)
@@ -443,6 +457,7 @@
     const world = World.baseWorld();
     const s = makeUserSchool(setup);
     World.placeUserSchool(world, s);
+    World.restrict(world, World.activeStates(s.state, setup.scope || 'region'));
     const year = START_YEAR;
     const state = {
       version: SAVE_VERSION,
@@ -472,6 +487,7 @@
       cr: Colleges.init(),
       alumni: [],
       settings: { autoSave: true },
+      scope: setup.scope || 'region',
       created: Date.now(),
     };
     for (const x of state.schools) {
@@ -501,7 +517,7 @@
     updateRankings(state, 'PRE', 'Preseason');
     const lg = league(state, s.leagueId);
     addNews(state, 'Coach ' + state.coach.name + ' takes over the ' + s.name + ' program: ' + state.roster.length + ' players across varsity, JV and freshman teams. The ' + year + ' season opens ' + Schedule.weekDateStr(year, 1, true) + '.', 'big');
-    addNews(state, s.name + ' will compete in ' + World.divLabel(s) + (s.state === 'OH' ? ', Region ' + s.region + ',' : '') + ' as a member of the ' + lg.name + '. Staff payroll: ' + U.money(pay) + '.');
+    addNews(state, s.name + ' will compete in ' + World.divLabel(s) + (s.region ? ', Region ' + s.region + ',' : '') + ' as a member of the ' + lg.name + '. Staff payroll: ' + U.money(pay) + '.');
     return state;
   }
 
@@ -592,10 +608,95 @@
   }
 
   function simGame(state, game) {
+    if (isBackground(state, game)) {
+      const q = quickGame(state, game);
+      finishGame(state, game, q);
+      return q;
+    }
     const g = engineGame(state, game, isUserGame(state, game));
     Engine.simToEnd(g);
     finishGame(state, game, g);
     return g;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Background games                                                     */
+  /* Games with no team from the user's state are resolved from team       */
+  /* ratings instead of play by play, with box-score production for each   */
+  /* team's starters so their recruiting still reflects how they play.     */
+  /* The constants are fitted to the play-by-play engine.                  */
+  /* ------------------------------------------------------------------ */
+  const QUICK = { perPoint: 2.75, home: 2.6, spread: 14.5, total: 45.6, totalSd: 14.8, yards: 326, yardsPerPoint: 9 };
+
+  function isBackground(state, game) {
+    const u = user(state);
+    return !isUserGame(state, game) && school(state, game.home).state !== u.state && school(state, game.away).state !== u.state;
+  }
+
+  function quickGame(state, game) {
+    const rng = new RNG('quick|' + game.id);
+    const h = school(state, game.home);
+    const a = school(state, game.away);
+    const oh = Team.teamOverall(h.r);
+    const oa = Team.teamOverall(a.r);
+    const margin = rng.normal((oh - oa) * QUICK.perPoint + (game.neutral ? 0 : QUICK.home), QUICK.spread);
+    const total = U.clamp(rng.normal(QUICK.total, QUICK.totalSd), 6, 110);
+    let hs = snapScore(Math.max(0, (total + margin) / 2));
+    let as = snapScore(Math.max(0, (total - margin) / 2));
+    if (hs === as) {
+      if (rng.chance(0.5)) hs += 3;
+      else as += 3;
+    }
+    const teams = [[h, hs, oh - oa], [a, as, oa - oh]];
+    const pstats = {};
+    const totals = teams.map(([s, pts, edge], i) => {
+      const yards = Math.max(60, Math.round(rng.normal(QUICK.yards + (pts - QUICK.total / 2) * QUICK.yardsPerPoint + edge * 4, 45)));
+      quickBox(state, rng, s, i, pts, yards, teams[1 - i][1], pstats);
+      return { totalYds: yards, turnovers: Math.max(0, Math.round(rng.normal(1.6 - edge * 0.05, 1))) };
+    });
+    return { score: [hs, as], ot: 0, pstats, totals, quick: true };
+  }
+
+  // One team's starters' stat lines in a background game: pts scored, yards gained, opp points allowed.
+  function quickBox(state, rng, s, ti, pts, yards, oppPts, out) {
+    const ctx = aiContext(state, s);
+    const pl = ctx.players;
+    const cache = aiCacheFor(state).players;
+    const ovr = (ref) => (cache[ref.id] ? Players.ovr(cache[ref.id].p) : 40);
+    const line = (ref) => out[ref.id] || (out[ref.id] = { id: ref.id, team: ti, pos: ref.pos });
+    // Shares within a position group lean toward the better players.
+    const split = (refs, weights) => {
+      const list = refs.slice(0, weights.length);
+      const w = list.map((r, i) => weights[i] * U.clamp(1 + (ovr(r) - 45) / 30, 0.5, 1.6));
+      const sum = w.reduce((x, y) => x + y, 0) || 1;
+      return list.map((r, i) => [r, w[i] / sum]);
+    };
+    const tds = Math.max(0, Math.round((pts - rng.float(0, 6)) / 7));
+    const fgs = Math.max(0, Math.round((pts - tds * 7) / 3));
+    const passYds = yards * rng.float(0.42, 0.58);
+    const rushYds = yards - passYds;
+    const passTD = Math.round(tds * rng.float(0.4, 0.68));
+    const rushTD = tds - passTD;
+    const qb = pl.QB[0];
+    if (qb) Object.assign(line(qb), { pYds: Math.round(passYds), pTD: passTD, pInt: Math.max(0, Math.round(rng.normal(0.8, 0.8))), rYds: Math.round(rushYds * 0.18) });
+    for (const [r, f] of split(pl.RB, [0.68, 0.32])) Object.assign(line(r), { rYds: Math.round(rushYds * 0.87 * f), rTD: Math.round(rushTD * f * rng.float(0.7, 1.3)) });
+    const catchers = split(pl.WR, [0.36, 0.3, 0.22]).map(([r, f]) => [r, f * 0.7]).concat(split(pl.TE, [1]).map(([r, f]) => [r, f * 0.18]), split(pl.RB, [1]).map(([r, f]) => [r, f * 0.12]));
+    for (const [r, f] of catchers) {
+      const y = Math.round(passYds * f * rng.float(0.7, 1.3));
+      Object.assign(line(r), { recYds: y, rec: Math.round(y / 12), recTD: Math.round(passTD * f * rng.float(0.6, 1.4)) });
+    }
+    // Defense: a better day against a weaker offense means more stops and takeaways.
+    const stop = U.clamp(1 + (QUICK.total / 2 - oppPts) / 40, 0.7, 1.3);
+    const sacks = Math.max(0, rng.normal(1.9, 1.1) * stop);
+    const picks = Math.max(0, rng.normal(0.9, 0.8) * stop);
+    const db = pl.DB || [];
+    const cbs = db.filter((r) => r.pos === 'CB');
+    const ss = db.filter((r) => r.pos === 'S');
+    for (const [r, f] of split(pl.DL, [0.32, 0.27, 0.23, 0.18])) Object.assign(line(r), { tkl: Math.round(10.5 * f * rng.float(0.6, 1.4)), sck: Math.round(sacks * 0.7 * f) });
+    for (const [r, f] of split(pl.LB, [0.42, 0.33, 0.25])) Object.assign(line(r), { tkl: Math.round(21 * f * rng.float(0.7, 1.3)), sck: Math.round(sacks * 0.3 * f) });
+    for (const [r, f] of split(cbs, [0.55, 0.45])) Object.assign(line(r), { tkl: Math.round(8 * f * rng.float(0.6, 1.4)), dInt: Math.round(picks * 0.55 * f) });
+    for (const [r, f] of split(ss, [0.55, 0.45])) Object.assign(line(r), { tkl: Math.round(6.5 * f * rng.float(0.6, 1.4)), dInt: Math.round(picks * 0.45 * f) });
+    if (pl.K[0]) Object.assign(line(pl.K[0]), { fgm: fgs });
   }
 
   const STAT_KEYS = ['pAtt', 'pCmp', 'pYds', 'pTD', 'pInt', 'rAtt', 'rYds', 'rTD', 'rec', 'recYds', 'recTD', 'tkl', 'sck', 'dInt', 'fgm', 'fga', 'xpm', 'xpa', 'pnt', 'pntYds'];
@@ -713,7 +814,7 @@
     a.rec.pf += game.as;
     a.rec.pa += game.hs;
     if (g) {
-      const T = [Engine.totals(g, 0), Engine.totals(g, 1)];
+      const T = g.totals || [Engine.totals(g, 0), Engine.totals(g, 1)];
       [[h, 0], [a, 1]].forEach(([s, i]) => {
         s.rec.gp++;
         s.rec.yds += T[i].totalYds;
@@ -810,7 +911,7 @@
     }
     state.playoffs = P;
     const u = user(state);
-    if (u.state === 'OH') {
+    if (World.hasPlayoffs(u.state)) {
       if (u.rec.seed) addNews(state, u.name + ' qualifies for the playoffs as the No. ' + u.rec.seed + ' seed in Division ' + U.roman(u.division) + ', Region ' + u.region + '!', 'big');
       else addNews(state, u.name + ' finishes ' + U.ordinal(u.cpRank) + ' in Region ' + u.region + ' and misses the playoffs.', 'loss');
     }
@@ -903,7 +1004,7 @@
     if (state.phase === 'regular') return true;
     if (state.phase !== 'playoffs') return false;
     const u = user(state);
-    if (u.state !== 'OH' || !u.rec.seed) return false;
+    if (!World.hasPlayoffs(u.state) || !u.rec.seed) return false;
     return !/^Lost/.test(u.rec.result) && u.rec.result !== 'State Champion';
   }
 
@@ -955,12 +1056,12 @@
           const top = st[0];
           for (const s of st) if (s.rec.lw === top.rec.lw && s.rec.ll === top.rec.ll) s.rec.leagueChamp = true;
         }
-        for (const s of state.schools) if (s.state !== 'OH') s.rec.result = s.rec.leagueChamp ? World.leagueWord(s.state) + ' Champion' : 'Season complete';
+        for (const s of state.schools) if (!World.hasPlayoffs(s.state)) s.rec.result = s.rec.leagueChamp ? World.leagueWord(s.state) + ' Champion' : 'Season complete';
         if (u.rec.leagueChamp) {
           state.coach.leagueTitles++;
           addNews(state, u.name + ' clinches a share of the ' + league(state, u.leagueId).name + ' title!', 'big');
         }
-        if (u.state !== 'OH') addNews(state, u.name + ' finishes the regular season ' + u.rec.w + '-' + u.rec.l + '. ' + World.stateName(u.state) + '’s ' + World.assoc(u.state) + ' playoff format is not in the game yet, so the season ends here.', 'big');
+        if (!World.hasPlayoffs(u.state)) addNews(state, u.name + ' finishes the regular season ' + u.rec.w + '-' + u.rec.l + '. ' + World.stateName(u.state) + '’s ' + World.assoc(u.state) + ' playoff format is not in the game yet, so the season ends here.', 'big');
         state.phase = 'playoffs';
         state.week = 11;
         setupPlayoffs(state);
@@ -983,7 +1084,7 @@
   /* Offseason                                                           */
   /* ------------------------------------------------------------------ */
   function seasonSummary(s) {
-    if (s.state !== 'OH') return s.rec.leagueChamp ? World.leagueWord(s.state) + ' Champion' : 'Season complete';
+    if (!World.hasPlayoffs(s.state)) return s.rec.leagueChamp ? World.leagueWord(s.state) + ' Champion' : 'Season complete';
     if (s.rec.result === 'State Champion') return 'State Champion';
     if (s.rec.result) return s.rec.result;
     return s.rec.seed ? 'Playoffs' : 'Missed playoffs';
@@ -1284,7 +1385,7 @@
 
   FNG.Season = {
     SAVE_VERSION, START_YEAR, ROUND_NAMES, FACILITIES, FOCUS, OFFSEASON_STEPS, SIZE_ENROLL, STATUS_PRESTIGE,
-    school, user, league, addNews, preview, newGame, weekGames, userGame, userSchedule, opponentOf, gameWeather,
+    school, user, league, addNews, states, preview, newGame, weekGames, userGame, userSchedule, opponentOf, gameWeather,
     simGame, advanceWeek, computeRatings, regionStandings, leagueStandings, aiRoster, findPlayer, recruitInfo, topRecruits,
     collegeOffers, collegeSuitors, offeredPlayers, collegeBoard, collegeTargets, collegeCommit, prospectMetrics,
     teamStanding, latestSnap, migrate,

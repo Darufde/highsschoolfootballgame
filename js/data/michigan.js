@@ -466,4 +466,19 @@ Wakefield|Gogebic|1500|46.48|-89.94
     cities,
     rivers,
   };
+
+  FNG.States.register({
+    key: 'MI',
+    name: 'Michigan',
+    assoc: 'MHSAA',
+    data: FNG.DATA.michigan,
+    generator: 'places',
+    seedTag: '|mi',
+    classes: { count: 8, method: 'equal' },
+    labels: 'number',
+    leagues: { style: 'conferences', word: 'Conference', prefix: 'M', catholicMaxDiv: 5 },
+    talent: -0.6,
+    depth: 0.2,
+    neighbors: ['OH', 'IN', 'WI'],
+  });
 })();

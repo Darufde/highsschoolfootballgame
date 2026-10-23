@@ -196,4 +196,18 @@ Sturgis|Union|1900|37.55|-87.98
     independentSeats: INDEPENDENT_SEATS,
     cities,
   };
+
+  FNG.States.register({
+    key: 'KY',
+    name: 'Kentucky',
+    assoc: 'KHSAA',
+    data: FNG.DATA.kentucky,
+    generator: 'kentucky',
+    classes: { count: 6, method: 'equal' },
+    labels: 'A',
+    leagues: { style: 'districts', word: 'District', prefix: 'K', plan: 'KY' },
+    talent: -2.4,
+    depth: -0.4,
+    neighbors: ['OH', 'IN', 'IL', 'MO', 'TN', 'VA', 'WV'],
+  });
 })();

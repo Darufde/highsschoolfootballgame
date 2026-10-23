@@ -298,7 +298,7 @@
 
   function afterWeek(st, week) {
     const us = Season.user(st).state;
-    if (week === 10 && st.phase === 'playoffs' && us !== 'OH') {
+    if (week === 10 && st.phase === 'playoffs' && !FNG.World.hasPlayoffs(us)) {
       toast('Regular season complete. ' + FNG.World.stateName(us) + '\u2019s ' + FNG.World.assoc(us) + ' playoffs are not in the game yet.', 'warn', 6000);
     } else if (week === 10 && st.phase === 'playoffs') {
       const u = Season.user(st);

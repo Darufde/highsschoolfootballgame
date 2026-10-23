@@ -209,7 +209,7 @@
         WM.setTitle(w.id, c.name + ' Recruiting');
         const board = Season.collegeBoard(st, id);
         const presRank = Colleges.LIST.filter((x) => x.prestige > c.prestige).length + 1;
-        const homeState = World.STATES.includes(c.state) ? ' · home state in the game' : '';
+        const homeState = Season.states(st).includes(c.state) ? ' · home state in your world' : '';
         body.appendChild(h('div', { class: 'hero', style: { background: 'linear-gradient(115deg, ' + c.colors[0] + 'cc, var(--panel-2) 70%)', borderColor: 'var(--line-2)' } },
           collegeLogo(c, 'lg'),
           h('div', { class: 'grow', style: { position: 'relative', zIndex: 1 } },

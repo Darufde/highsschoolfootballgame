@@ -127,12 +127,15 @@
     return U.clamp(Math.log2(enrollment / 300) * 3.5, -4, 9);
   }
 
-  // Statewide depth of football talent (Ohio is the deepest football state, West Virginia the thinnest).
-  const STATE_TALENT = { OH: 0, MI: -0.6, KY: -2.4, WV: -2.8, TN: -0.9 };
+  // Statewide depth of football talent, from the state registry (Ohio is the 0 reference).
+  function stateTalent(key) {
+    const cfg = FNG.States.get(key);
+    return cfg ? cfg.talent : 0;
+  }
 
   // Expected overall of an average junior in a program: tradition, size, state and youth program.
   function programTalent(school, facilities) {
-    return 28 + (STATE_TALENT[school.state] || 0) + (school.prestige - 50) * 0.14 + sizeBonus(school.enrollment) * 0.5 + (school.type === 'private' ? 1.5 : 0) + (facilities ? (facilities.youth - 1) * 1 : 0);
+    return 28 + stateTalent(school.state) + (school.prestige - 50) * 0.14 + sizeBonus(school.enrollment) * 0.5 + (school.type === 'private' ? 1.5 : 0) + (facilities ? (facilities.youth - 1) * 1 : 0);
   }
 
   function userEffects(state) {

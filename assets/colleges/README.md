@@ -33,9 +33,11 @@ The files are WebP images with a `.png` name, which every modern browser display
 | --- | --- |
 | Alabama | `alabama.png` |
 | Arkansas | `arkansas.png` |
+| Auburn | `auburn.png` |
 | Florida | `florida.png` |
 | Georgia | `georgia.png` |
 | Kentucky | `kentucky.png` |
+| LSU | `lsu.png` |
 | Mississippi State | `mississippi-state.png` |
 | Missouri | `missouri.png` |
 | Oklahoma | `oklahoma.png` |
@@ -120,6 +122,20 @@ The files are WebP images with a `.png` name, which every modern browser display
 | UAB | `uab.png` |
 | USF | `usf.png` |
 | UTSA | `utsa.png` |
+
+## Mountain West
+
+| College | File |
+| --- | --- |
+| Air Force | `air-force.png` |
+| Hawaii | `hawaii.png` |
+| Nevada | `nevada.png` |
+| New Mexico | `new-mexico.png` |
+| Northern Illinois | `northern-illinois.png` |
+| San José State | `san-jose-state.png` |
+| UNLV | `unlv.png` |
+| UTEP | `utep.png` |
+| Wyoming | `wyoming.png` |
 
 ## Independent
 

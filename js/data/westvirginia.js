@@ -202,4 +202,19 @@ Clear Fork|Wyoming|1500|37.62|-81.71
     rivers,
     cities: towns.slice().sort((a, b) => a.name.localeCompare(b.name)),
   };
+
+  FNG.States.register({
+    key: 'WV',
+    name: 'West Virginia',
+    assoc: 'WVSSAC',
+    data: FNG.DATA.westvirginia,
+    generator: 'counties',
+    seedTag: '|wv',
+    classes: { count: 3, method: 'equal' },
+    labels: ['AAA', 'AA', 'A'],
+    leagues: { style: 'conferences', word: 'Conference', prefix: 'W', catholicMaxDiv: 2 },
+    talent: -2.8,
+    depth: -0.6,
+    neighbors: ['OH', 'PA', 'MD', 'VA', 'KY'],
+  });
 })();

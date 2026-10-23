@@ -45,9 +45,9 @@
         };
         const search = h('input', { class: 'input', placeholder: 'Search by school, city or county…', value: S.q, style: { width: '260px' }, oninput: (e) => { S.q = e.target.value; draw(); } });
         body.appendChild(h('div', { class: 'toolbar' }, search,
-          select([{ value: 'all', label: 'All states' }].concat(World.STATES.map((k) => ({ value: k, label: World.stateName(k) }))), S.st, (v) => { S.st = v; S.div = '0'; S.county = 'all'; WM.refresh(w.id); }),
+          select([{ value: 'all', label: 'All states' }].concat(Season.states(st).map((k) => ({ value: k, label: World.stateName(k) }))), S.st, (v) => { S.st = v; S.div = '0'; S.county = 'all'; WM.refresh(w.id); }),
           select([{ value: 'all', label: 'All types' }, { value: 'public', label: 'Public' }, { value: 'private', label: 'Private' }], S.type, (v) => { S.type = v; draw(); }),
-          S.st === 'all' ? null : select([{ value: '0', label: S.st === 'OH' ? 'All divisions' : 'All classes' }].concat(World.divisions(S.st).map((d) => ({ value: String(d), label: World.divLabel({ state: S.st, division: d }) }))), S.div, (v) => { S.div = v; draw(); }),
+          S.st === 'all' ? null : select([{ value: '0', label: /^Division/.test(World.divLabel({ state: S.st, division: 1 })) ? 'All divisions' : 'All classes' }].concat(World.divisions(S.st).map((d) => ({ value: String(d), label: World.divLabel({ state: S.st, division: d }) }))), S.div, (v) => { S.div = v; draw(); }),
           select([{ value: 'all', label: 'All counties' }].concat(counties.map((c) => ({ value: c, label: c + ' County' }))), S.county, (v) => { S.county = v; draw(); }),
           h('div', { class: 'grow' }), count));
         body.appendChild(results);
@@ -89,7 +89,7 @@
         const T = w.state.tab;
         if (T === 'overview') {
           const info = h('div', { class: 'card' }, h('h3', { class: 'sect' }, 'Profile'), h('dl', { class: 'kv' },
-            h('dt', null, 'Enrollment'), h('dd', null, U.num(s.enrollment) + (s.type === 'private' && s.state === 'OH' ? ' (×1.3 for divisions)' : '')),
+            h('dt', null, 'Enrollment'), h('dd', null, U.num(s.enrollment) + (s.type === 'private' && FNG.States.get(s.state).classes.method === 'ohio' ? ' (×1.3 for divisions)' : '')),
             h('dt', null, 'Coaching staff'), h('dd', null, s.isUser ? 'Yours' : s.staffQ >= 62 ? 'Excellent' : s.staffQ >= 52 ? 'Good' : s.staffQ >= 42 ? 'Average' : 'Below average'),
             h('dt', null, 'Tradition'), h('dd', null, stars(U.clamp(Math.round(s.prestige / 20), 1, 5)), ' ', h('span', { class: 'muted small' }, s.prestige + '/100')),
             h('dt', null, 'League record'), h('dd', null, s.rec.lw + '-' + s.rec.ll),
