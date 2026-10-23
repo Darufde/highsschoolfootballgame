@@ -1,5 +1,5 @@
 /*
- * College recruiting: the power conference programs (and Notre Dame) evaluate every prospect
+ * College recruiting: the Big Ten, SEC, ACC, Big 12 and Pac-12 programs (and Notre Dame) evaluate every prospect
  * in the game each week and extend scholarship offers.
  *
  * A college values a player from his recruit rating (ability, ceiling, measurables, production
@@ -33,17 +33,21 @@
     OH: ['MI', 'IN', 'KY', 'WV', 'PA'],
     KY: ['OH', 'IN', 'IL', 'MO', 'TN', 'VA', 'WV'],
     TN: ['KY', 'VA', 'NC', 'GA', 'AL', 'MS', 'AR', 'MO'],
+    MI: ['OH', 'IN', 'WI'],
+    WV: ['OH', 'PA', 'MD', 'VA', 'KY'],
   };
   // Talent depth of each state's competition, on top of division size.
-  const STATE_DEPTH = { OH: 0.4, TN: 0, KY: -0.4 };
-  // Offers per position a college extends in one class, before scaling by how much it recruits this region.
-  const SLOTS = { QB: 2, RB: 3, WR: 4, TE: 2, OL: 5, DL: 5, LB: 3, CB: 3, S: 3, K: 1, P: 1 };
-  const POOL_MIN = 58; // projected rating below which no power program evaluates a player
+  const STATE_DEPTH = { OH: 0.4, MI: 0.2, TN: 0, KY: -0.4, WV: -0.6 };
+  // Offers per position a college extends to one senior class (a national-sized board of ~275), before
+  // scaling by how much it recruits the states in the game. Younger classes get a smaller share.
+  const SLOTS = { QB: 18, RB: 27, WR: 39, TE: 18, OL: 45, DL: 42, LB: 27, CB: 30, S: 24, K: 4, P: 2 };
+  const CLASS_SLOTS = [1, 0.75, 0.35, 0.12]; // seniors, juniors, sophomores, freshmen
+  const POOL_MIN = 55.5; // projected rating below which no power program evaluates a player
   const CLASS_PEN = [0, 0.5, 2.5, 5]; // seniors, juniors, sophomores, freshmen: offers to younger players are rarer
   const WITHDRAW_AT = -5;
   const MUST_HAVE = 8; // a player this far above the bar gets an offer even if the position is full...
   const OVERFLOW = 2; // ...up to this many extra offers at the position
-  const NO_CHANCE = 22;
+  const NO_CHANCE = 28;
   const SIGNED_YEARS = 6;
   const WIRE = 80;
 
@@ -57,7 +61,7 @@
 
   // The rating a college typically recruits at.
   function band(c) {
-    return 56.5 + c.prestige * 0.19;
+    return 46.5 + c.prestige * 0.22;
   }
   // Distance (km) a college recruits without any penalty: elite programs recruit nationally.
   function reach(c) {
@@ -95,7 +99,7 @@
   function geo(c, s, d) {
     const rel = relCode(c, s.state);
     const home = rel === 2 ? 2 + (100 - c.prestige) * 0.04 : rel;
-    return home - Math.max(0, (d ? d[c.i] : dist(c, s)) - reach(c)) / 140;
+    return home - Math.max(0, (d ? d[c.i] : dist(c, s)) - reach(c)) / 100;
   }
 
   /*
@@ -117,7 +121,7 @@
     };
   }
 
-  const HYPE = [0.2, 0, 0.3, 0.6, 1.5, 3]; // by stars; unranked players get nothing
+  const HYPE = [0, 0, 0.1, 0.5, 1.5, 3]; // by stars
   // value = proj + (1-q)*0.3*pot + (0.3 + 0.7*(1-q))*stats + 0.6*recent + q*hype + competition, with q = prestige/100,
   // kept as v0 + q*v1 so the weekly pass over every college and prospect stays cheap.
   function prepare(m) {
@@ -178,9 +182,9 @@
     return U.clamp(1.2 - U.distKm(c, center) / 1500, 0.35, 1);
   }
 
-  function slotsFor(c, cy, pos, center) {
+  function slotsFor(c, cy, pos, center, cls) {
     const need = 0.6 + 0.8 * (noise(c, { h: FNG.hashString(cy + '|' + pos) }, 1, 3) / 6 + 0.5);
-    return Math.max(1, Math.round(SLOTS[pos] * need * share(c, center)));
+    return Math.max(1, Math.round(SLOTS[pos] * need * share(c, center) * CLASS_SLOTS[cls || 0]));
   }
 
   /*
@@ -203,18 +207,32 @@
       }
     }
     const byPid = {};
-    for (const m of ms) byPid[m.p.id] = m;
-    // Offer counts per college, class and position (players outside the pool still count).
+    for (const m of ms) {
+      byPid[m.p.id] = m;
+      m.kpos = m.cy + '|' + m.p.pos;
+    }
+    // Offer counts per college, then class and position (players outside the pool still count).
     const counts = {};
-    const posOf = {};
-    for (const m of ms) posOf[m.p.id] = [m.cy, m.p.pos];
+    for (const c of LIST) counts[c.id] = {};
     for (const pid in cr.offers) {
-      const key = posOf[pid] || cr.meta[pid];
+      const key = byPid[pid] ? byPid[pid].kpos : cr.meta[pid] ? cr.meta[pid][0] + '|' + cr.meta[pid][1] : null;
       if (!key) continue;
-      for (const o of cr.offers[pid]) {
-        const k = o[0] + '|' + key[0] + '|' + key[1];
-        counts[k] = (counts[k] || 0) + 1;
-      }
+      for (const o of cr.offers[pid]) if (counts[o[0]]) counts[o[0]][key] = (counts[o[0]][key] || 0) + 1;
+    }
+    // The pool as flat arrays: the per-college pass below reads these about a million times a week.
+    const n = ms.length;
+    const V0 = new Float64Array(n);
+    const V1 = new Float64Array(n);
+    const UB = new Float64Array(n);
+    const PEN = new Float64Array(n);
+    const YOUNG = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      const m = ms[i];
+      V0[i] = m.v0;
+      V1[i] = m.v1;
+      UB[i] = m.ub;
+      PEN[i] = CLASS_PEN[m.cls];
+      YOUNG[i] = m.cls ? 1 : 0;
     }
     const events = [];
     for (const c of LIST) {
@@ -224,43 +242,54 @@
       const rch = reach(c);
       const home = [0, 1, 2 + (100 - c.prestige) * 0.04];
       const time = (1 - U.clamp(ctx.progress, 0, 1)) * 1.5;
+      const mine = counts[c.id];
+      const slotCache = {};
+      const ci = c.i;
       const cands = [];
-      for (const m of ms) {
-        if (m.ub < bar + WITHDRAW_AT) break;
-        const held = m.held !== null && m.held[c.i] === 1;
-        if (m.ub < bar && !held) continue;
-        const base = m.v0 + q * m.v1 - bar + home[m.rel[c.i]] - Math.max(0, m.d[c.i] - rch) / 140 - CLASS_PEN[m.cls] - (m.cls ? time : 0);
-        if (base + 3 + NOISE_MAX < (held ? WITHDRAW_AT : 0)) {
-          if (held) cands.push([m, -Infinity]);
-          continue;
-        }
-        cands.push([m, finish(c, m, base)]);
+      for (let i = 0; i < n; i++) {
+        if (UB[i] < bar + WITHDRAW_AT) break;
+        const m = ms[i];
+        const held = m.held !== null && m.held[ci] === 1;
+        if (UB[i] < bar && !held) continue;
+        const dist = m.d[ci] - rch;
+        const base = V0[i] + q * V1[i] - bar + home[m.rel[ci]] - (dist > 0 ? dist / 100 : 0) - PEN[i] - (YOUNG[i] ? time : 0);
+        // Interest and the staff's grade add between -4 - NOISE_MAX and 3 + NOISE_MAX.
+        if (held ? base - 4 - NOISE_MAX >= WITHDRAW_AT : base + 3 + NOISE_MAX < 0) continue;
+        cands.push(m, base);
       }
-      cands.sort((a, b) => b[1] - a[1]);
-      for (const [m, e] of cands) {
-        const list = cr.offers[m.p.id];
-        const at = list ? list.findIndex((o) => o[0] === c.id) : -1;
-        const k = c.id + '|' + m.cy + '|' + m.p.pos;
-        if (at >= 0) {
-          if (e < WITHDRAW_AT) {
-            list.splice(at, 1);
-            counts[k]--;
+      // Best first by everything but interest and grading noise; the full grade is computed only
+      // for players who could still get (or lose) an offer.
+      const order = [];
+      for (let i = 0; i < cands.length; i += 2) order.push(i);
+      order.sort((x, y) => cands[y + 1] - cands[x + 1]);
+      for (const i of order) {
+        const m = cands[i];
+        const base = cands[i + 1];
+        const k = m.kpos;
+        if (m.held !== null && m.held[c.i] === 1) {
+          if (finish(c, m, base) < WITHDRAW_AT) {
+            const list = cr.offers[m.p.id];
+            list.splice(list.findIndex((o) => o[0] === c.id), 1);
+            mine[k]--;
             events.push({ cid: c.id, pid: m.p.id, kind: 'pulled' });
           }
           continue;
         }
+        const slots = slotCache[k] || (slotCache[k] = slotsFor(c, m.cy, m.p.pos, ctx.center, m.cls));
+        const have = mine[k] || 0;
+        // Five-stars get offers even when the position is already well stocked.
+        const elite = m.rank > 0 && m.stars === 5;
+        if (have >= slots + OVERFLOW + (elite ? 2 : 0)) continue;
+        if (!elite && base + 3 + NOISE_MAX < (4 * have) / slots) continue;
+        const e = finish(c, m, base);
         if (e < 0) continue;
         // A staff won't spend an offer on an out-of-state player with almost no interest in the school.
         if (m.rel[c.i] !== 2 && interest(c, m) < NO_CHANCE) continue;
-        const slots = slotsFor(c, m.cy, m.p.pos, ctx.center);
-        const have = counts[k] || 0;
-        // Top-10 national prospects get offers even when the position is already well stocked.
-        const elite = m.rank > 0 && m.rank <= 10;
         if (!elite && e - (4 * have) / slots < 0) continue;
-        if (have >= slots + OVERFLOW + (elite ? 2 : 0) || (have >= slots && e < MUST_HAVE && !elite)) continue;
+        if (have >= slots && e < MUST_HAVE && !elite) continue;
         const entry = cr.offers[m.p.id] || (cr.offers[m.p.id] = []);
         entry.push([c.id, ctx.year, ctx.week]);
-        counts[k] = have + 1;
+        mine[k] = have + 1;
         events.push({ cid: c.id, pid: m.p.id, kind: 'offer' });
       }
     }
@@ -270,8 +299,7 @@
       else if (byPid[pid]) cr.meta[pid] = [byPid[pid].cy, byPid[pid].p.pos];
     }
     for (const pid in cr.meta) if (!cr.offers[pid]) delete cr.meta[pid];
-    for (const ev of events) cr.wire.unshift([ctx.year, ctx.week, ev.cid, ev.pid, ev.kind]);
-    if (cr.wire.length > WIRE) cr.wire.length = WIRE;
+    cr.wire = events.slice(-WIRE).reverse().map((ev) => [ctx.year, ctx.week, ev.cid, ev.pid, ev.kind]).concat(cr.wire).slice(0, WIRE);
     return events;
   }
 

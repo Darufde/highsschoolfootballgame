@@ -90,40 +90,16 @@
     return h('span', { class: 'sbadge' + (size ? ' ' + size : ''), style, title: s.name }, txt);
   }
 
-  /*
-   * College logos load from img/colleges/<id>.png (then .svg, .webp, .jpg). Until a file loads, or
-   * when none exists, the college shows a badge in its colors. Each college is looked up once.
-   */
-  const LOGO_EXT = ['png', 'svg', 'webp', 'jpg'];
-  const logoSrc = {};
-  const logoProbe = {};
-  function findLogo(c) {
-    if (!logoProbe[c.id]) {
-      logoProbe[c.id] = new Promise((resolve) => {
-        let i = 0;
-        const img = new Image();
-        img.onload = () => resolve(c.logo + '.' + LOGO_EXT[i]);
-        img.onerror = () => {
-          i++;
-          if (i < LOGO_EXT.length) img.src = c.logo + '.' + LOGO_EXT[i];
-          else resolve(null);
-        };
-        img.src = c.logo + '.' + LOGO_EXT[0];
-      }).then((src) => (logoSrc[c.id] = src));
-    }
-    return logoProbe[c.id];
-  }
+  // College logo from assets/colleges/. If the file can't load, the college's colors and abbreviation stand in.
   function collegeLogo(c, size) {
-    const el = h('span', { class: 'clogo' + (size ? ' ' + size : ''), title: c.name, style: { background: c.colors[0], color: c.colors[1], borderColor: c.colors[1] } }, h('span', { class: 'ab' + (c.abbr.length >= 4 ? ' long' : '') }, c.abbr));
-    const show = (src) => {
-      if (!src) return;
-      el.replaceChildren(h('img', { src, alt: c.name, draggable: 'false' }));
-      el.classList.add('img');
-      el.style.background = '';
-      el.style.borderColor = '';
-    };
-    if (c.id in logoSrc) show(logoSrc[c.id]);
-    else findLogo(c).then(show);
+    const el = h('span', { class: 'clogo img' + (size ? ' ' + size : ''), title: c.name });
+    const img = h('img', { src: c.logo, alt: c.name, draggable: 'false', loading: 'lazy' });
+    img.addEventListener('error', () => {
+      el.classList.remove('img');
+      Object.assign(el.style, { background: c.colors[0], color: c.colors[1], borderColor: c.colors[1] });
+      el.replaceChildren(h('span', { class: 'ab' + (c.abbr.length >= 4 ? ' long' : '') }, c.abbr));
+    });
+    el.appendChild(img);
     return el;
   }
 

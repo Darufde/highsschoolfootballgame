@@ -559,7 +559,7 @@ Carey|Wyandot|3600|40.95|-83.38
     rivers,
   };
 
-  // The state picker shows every state; Ohio, Kentucky and Tennessee are playable.
+  // The state picker shows every state; Ohio, Michigan, Kentucky, West Virginia and Tennessee are playable.
   FNG.DATA.states = [
     ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'],
     ['CT', 'Connecticut'], ['DE', 'Delaware'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'],
@@ -571,5 +571,5 @@ Carey|Wyandot|3600|40.95|-83.38
     ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'],
     ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'],
     ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
-  ].map(([abbr, name]) => ({ abbr, name, playable: abbr === 'OH' || abbr === 'KY' || abbr === 'TN' }));
+  ].map(([abbr, name]) => ({ abbr, name, playable: ['OH', 'MI', 'KY', 'WV', 'TN'].includes(abbr) }));
 })();

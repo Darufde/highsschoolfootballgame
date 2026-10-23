@@ -7,7 +7,7 @@
   const FNG = window.FNG;
   const { RNG, U, Team, Players, Engine, Schedule, World, Coaches, Recruits, TeamRank, Colleges } = FNG;
 
-  const SAVE_VERSION = 4;
+  const SAVE_VERSION = 5;
   const START_YEAR = 2026;
   const SIZE_ENROLL = { small: 240, medium: 600, large: 1200, xl: 2100 };
   const STATUS_PRESTIGE = { rebuild: 28, average: 50, established: 72 };
@@ -125,8 +125,9 @@
   }
 
   function updateRecruits(state, label) {
+    // Class lists hold [playerId, rating, previous rank (0 = newly ranked)] in rank order.
     const prev = {};
-    if (state.recruits) for (const cy in state.recruits.classes) state.recruits.classes[cy].forEach((e, i) => (prev[e[0]] = i + 1));
+    if (state.recruits && state.recruits.year === state.year) for (const cy in state.recruits.classes) state.recruits.classes[cy].forEach((e, i) => (prev[e[0]] = i + 1));
     const classes = {};
     const pool = [];
     for (const s of state.schools) {
@@ -137,12 +138,15 @@
         const sc = Math.round((base + Recruits.production(p, state.perf[p.id], s)) * 10) / 10;
         if (sc < Recruits.MIN_SCORE) continue;
         const cy = Recruits.classYear(p, state.year);
-        (classes[cy] = classes[cy] || []).push([p.id, sc, s.id]);
+        (classes[cy] = classes[cy] || []).push([p.id, sc, 0]);
         pool.push({ p, s, sc, cy });
       }
     }
-    for (const cy in classes) classes[cy] = classes[cy].sort((a, b) => b[1] - a[1]).slice(0, Recruits.RANKED_PER_CLASS);
-    state.recruits = { year: state.year, week: state.week, label, classes, prev };
+    for (const cy in classes) {
+      classes[cy] = classes[cy].sort((a, b) => b[1] - a[1]).slice(0, Recruits.RANKED_PER_CLASS);
+      for (const e of classes[cy]) e[2] = prev[e[0]] || 0;
+    }
+    state.recruits = { year: state.year, week: state.week, label, classes };
     updateColleges(state, pool);
   }
 
@@ -234,8 +238,10 @@
     if (!R || !state.cr) return [];
     const progress = state.phase === 'regular' ? (state.week - 1) / 10 : 1;
     const out = [];
+    const floor = Colleges.band(c) - 12;
     for (const cy in R.classes) {
       for (const e of R.classes[cy]) {
+        if (e[1] + (state.cr.off[cy] || 0) < floor) break;
         const held = state.cr.offers[e[0]];
         if (held && held.some((o) => o[0] === cid)) continue;
         const f = findPlayer(state, e[0]);
@@ -285,7 +291,7 @@
     let idx = recruitIndex.get(R);
     if (!idx) {
       idx = {};
-      for (const cy in R.classes) R.classes[cy].forEach((e, i) => (idx[e[0]] = { rank: i + 1, score: e[1], cy: Number(cy) }));
+      for (const cy in R.classes) R.classes[cy].forEach((e, i) => (idx[e[0]] = { rank: i + 1, score: e[1], cy: Number(cy), prev: e[2] || 0 }));
       recruitIndex.set(R, idx);
     }
     return idx;
@@ -301,7 +307,7 @@
     const progress = state.phase === 'regular' ? (state.week - 1) / 10 : 1;
     return {
       rank: e.rank, score: e.score, classYear: e.cy, stars: Recruits.stars(e.rank),
-      prev: R.prev[p.id] || 0, move: R.prev[p.id] ? R.prev[p.id] - e.rank : null,
+      prev: e.prev, move: e.prev ? e.prev - e.rank : null,
       offers: collegeOffers(state, p, s),
       otherOffers: Recruits.offers(p, e.score, state.year, progress),
     };
@@ -323,7 +329,9 @@
   }
 
   // Bring an older save up to date (school names keep their old spelling).
-  // Version 3 saves keep their Ohio/Kentucky world (Tennessee is for new programs) and gain college recruiting.
+  // Older saves keep the states they were created with (new states are for new programs). Version 3
+  // saves gain college recruiting; version 4 saves lose colleges without logos and get the larger
+  // recruit rankings.
   function migrate(state) {
     if (state.version === 2) {
       state.version = 3;
@@ -337,8 +345,22 @@
       state.version = 4;
       for (const lg of state.leagues) if (lg.kind === 'district' && !lg.state) lg.state = 'KY';
       state.cr = Colleges.init();
-      updateRecruits(state, state.recruits ? state.recruits.label : 'Current');
-      if (state.recruits) state.recruits.prev = {};
+    }
+    if (state.version === 4) {
+      state.version = 5;
+      for (const lg of state.leagues) if (!lg.state) lg.state = lg.kind === 'district' ? 'KY' : 'OH';
+      const cr = state.cr || (state.cr = Colleges.init());
+      for (const pid in cr.offers) {
+        cr.offers[pid] = cr.offers[pid].filter((o) => Colleges.get(o[0]));
+        if (!cr.offers[pid].length) {
+          delete cr.offers[pid];
+          if (cr.meta) delete cr.meta[pid];
+        }
+      }
+      for (const y in cr.signed) cr.signed[y] = cr.signed[y].filter((x) => Colleges.get(x[0]));
+      cr.wire = cr.wire.filter((x) => Colleges.get(x[2]));
+      state.recruits = null;
+      updateRecruits(state, state.phase === 'offseason' ? 'Final' : 'Current');
     }
     return state;
   }
@@ -542,7 +564,7 @@
   // Only players within reach of the rankings get their production tracked (keeps saves small).
   function trackCutoff(state, p) {
     const list = state.recruits && state.recruits.classes[Recruits.classYear(p, state.year)];
-    const last = list && list.length >= Recruits.RANKED_PER_CLASS ? list[list.length - 1][1] : Recruits.MIN_SCORE;
+    const last = list && list.length >= Recruits.TRACK_RANK ? list[Recruits.TRACK_RANK - 1][1] : Recruits.MIN_SCORE;
     return last - 8;
   }
 
@@ -915,7 +937,7 @@
           state.coach.leagueTitles++;
           addNews(state, u.name + ' clinches a share of the ' + league(state, u.leagueId).name + ' title!', 'big');
         }
-        if (u.state !== 'OH') addNews(state, u.name + ' finishes the regular season ' + u.rec.w + '-' + u.rec.l + '. ' + World.stateName(u.state) + '’s ' + (u.state === 'KY' ? 'KHSAA' : 'TSSAA') + ' playoff format is not in the game yet, so the season ends here.', 'big');
+        if (u.state !== 'OH') addNews(state, u.name + ' finishes the regular season ' + u.rec.w + '-' + u.rec.l + '. ' + World.stateName(u.state) + '’s ' + World.assoc(u.state) + ' playoff format is not in the game yet, so the season ends here.', 'big');
         state.phase = 'playoffs';
         state.week = 11;
         setupPlayoffs(state);

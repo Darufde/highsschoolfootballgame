@@ -11,7 +11,12 @@
   const { RNG, U } = FNG;
   const P = FNG.Players;
 
-  const RANKED_PER_CLASS = 300;
+  // Stars per graduating class, best first: 32 five-stars, 350 four-stars, 2,000 three-stars,
+  // 1,500 two-stars and 1,000 one-stars. Everyone ranked gets at least one star.
+  const STAR_COUNTS = { 5: 32, 4: 350, 3: 2000, 2: 1500, 1: 1000 };
+  const STAR_CUTS = [5, 4, 3, 2, 1].map((n, i, a) => a.slice(0, i + 1).reduce((t, k) => t + STAR_COUNTS[k], 0)); // last rank for 5★..1★
+  const RANKED_PER_CLASS = STAR_CUTS[STAR_CUTS.length - 1];
+  const TRACK_RANK = 1000; // production is tracked for players within reach of this rank
   const MIN_SCORE = 38; // below this a player isn't evaluated at all
 
   // Ideal size by position: [height inches, weight lbs]
@@ -102,7 +107,8 @@
 
   function stars(rank) {
     if (!rank) return 0;
-    return rank <= 3 ? 5 : rank <= 25 ? 4 : rank <= 100 ? 3 : 2;
+    for (let i = 0; i < STAR_CUTS.length; i++) if (rank <= STAR_CUTS[i]) return 5 - i;
+    return 0;
   }
 
   // Minimum rating for each level of college to offer.
@@ -149,7 +155,7 @@
   }
 
   FNG.Recruits = {
-    RANKED_PER_CLASS, MIN_SCORE, COLLEGES, TIER_NAME, OFFER_AT, bestTier,
+    RANKED_PER_CLASS, STAR_COUNTS, STAR_CUTS, TRACK_RANK, MIN_SCORE, COLLEGES, TIER_NAME, OFFER_AT, bestTier,
     classYear, physical, competition, baseScore, gamePoints, addGame, production, recent, score, stars, offers, commitment, statLine,
   };
 })();

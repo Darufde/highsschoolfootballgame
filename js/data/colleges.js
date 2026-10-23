@@ -1,10 +1,12 @@
 /*
- * Power conference colleges (Big Ten, SEC, ACC, Big 12) plus Notre Dame.
+ * Colleges that recruit in the game: the Big Ten, SEC, ACC, Big 12 and Pac-12 programs plus Notre
+ * Dame, limited to the schools with a logo in assets/colleges/ (a college without a logo is not
+ * in the game).
  *
- * Each college has a fixed id that is also the name of its logo file (img/colleges/<id>.png,
- * falling back to .svg), a campus location for recruiting distance, colors for the fallback
- * badge, and a prestige rating (0-100) that sets which recruits it targets and how interested
- * top players are in it.
+ * Each college has a fixed id that is also the name of its logo file (assets/colleges/<id>.png),
+ * a campus location for recruiting distance, colors for the badge shown if the logo can't load,
+ * and a prestige rating (0-100) that sets which recruits it targets and how interested top
+ * players are in it.
  */
 (function () {
   'use strict';
@@ -16,6 +18,7 @@
     { id: 'SEC', name: 'SEC' },
     { id: 'ACC', name: 'ACC' },
     { id: 'B12', name: 'Big 12' },
+    { id: 'P12', name: 'Pac-12' },
     { id: 'IND', name: 'Independent' },
   ];
 
@@ -42,13 +45,11 @@ northwestern|Northwestern|NU|B1G|Evanston|IL|42.06|-87.68|#4E2A84|#FFFFFF|50
 alabama|Alabama|ALA|SEC|Tuscaloosa|AL|33.21|-87.55|#9E1B32|#FFFFFF|96
 georgia|Georgia|UGA|SEC|Athens|GA|33.95|-83.37|#BA0C2F|#000000|96
 texas|Texas|TEX|SEC|Austin|TX|30.28|-97.73|#BF5700|#FFFFFF|93
-lsu|LSU|LSU|SEC|Baton Rouge|LA|30.41|-91.18|#461D7C|#FDD023|89
 oklahoma|Oklahoma|OU|SEC|Norman|OK|35.21|-97.44|#841617|#FDF9D8|86
 tennessee|Tennessee|TENN|SEC|Knoxville|TN|35.95|-83.93|#FF8200|#FFFFFF|85
 texas-am|Texas A&M|TAMU|SEC|College Station|TX|30.61|-96.34|#500000|#FFFFFF|85
 florida|Florida|UF|SEC|Gainesville|FL|29.65|-82.35|#0021A5|#FA4616|84
 ole-miss|Ole Miss|MISS|SEC|Oxford|MS|34.36|-89.54|#CE1126|#14213D|82
-auburn|Auburn|AUB|SEC|Auburn|AL|32.60|-85.49|#0C2340|#E87722|81
 south-carolina|South Carolina|SC|SEC|Columbia|SC|34.00|-81.03|#73000A|#000000|74
 missouri|Missouri|MIZ|SEC|Columbia|MO|38.94|-92.33|#F1B82D|#000000|72
 arkansas|Arkansas|ARK|SEC|Fayetteville|AR|36.07|-94.17|#9D2235|#FFFFFF|65
@@ -88,12 +89,20 @@ arizona|Arizona|ARIZ|B12|Tucson|AZ|32.23|-110.95|#CC0033|#003366|58
 ucf|UCF|UCF|B12|Orlando|FL|28.60|-81.20|#000000|#BA9B37|58
 houston|Houston|HOU|B12|Houston|TX|29.72|-95.34|#C8102E|#FFFFFF|56
 kansas|Kansas|KU|B12|Lawrence|KS|38.95|-95.25|#0051BA|#E8000D|55
+boise-state|Boise State|BSU|P12|Boise|ID|43.60|-116.20|#0033A0|#D64309|70
+oregon-state|Oregon State|ORST|P12|Corvallis|OR|44.56|-123.28|#DC4405|#000000|56
+washington-state|Washington State|WSU|P12|Pullman|WA|46.73|-117.16|#981E32|#5E6A71|55
+fresno-state|Fresno State|FRES|P12|Fresno|CA|36.81|-119.75|#DB0032|#002E6D|52
+texas-state|Texas State|TXST|P12|San Marcos|TX|29.89|-97.94|#501214|#8D734A|50
+san-diego-state|San Diego State|SDSU|P12|San Diego|CA|32.78|-117.07|#A6192E|#000000|50
+utah-state|Utah State|USU|P12|Logan|UT|41.75|-111.81|#0F2439|#8A8D8F|48
+colorado-state|Colorado State|CSU|P12|Fort Collins|CO|40.57|-105.08|#1E4D2B|#C8C372|47
 notre-dame|Notre Dame|ND|IND|Notre Dame|IN|41.70|-86.24|#0C2340|#C99700|92
 `;
 
   const colleges = RAW.trim().split('\n').map((line) => {
     const [id, name, abbr, conf, city, state, lat, lon, c1, c2, prestige] = line.split('|');
-    return { id, name, abbr, conf, city, state, lat: Number(lat), lon: Number(lon), colors: [c1, c2], prestige: Number(prestige), logo: 'img/colleges/' + id };
+    return { id, name, abbr, conf, city, state, lat: Number(lat), lon: Number(lon), colors: [c1, c2], prestige: Number(prestige), logo: 'assets/colleges/' + id + '.png' };
   });
 
   FNG.DATA.conferences = CONFERENCES;

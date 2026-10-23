@@ -127,8 +127,8 @@
     return U.clamp(Math.log2(enrollment / 300) * 3.5, -4, 9);
   }
 
-  // Statewide depth of football talent (Ohio is the deepest football state, Kentucky the thinnest).
-  const STATE_TALENT = { OH: 0, KY: -2.4, TN: -0.9 };
+  // Statewide depth of football talent (Ohio is the deepest football state, West Virginia the thinnest).
+  const STATE_TALENT = { OH: 0, MI: -0.6, KY: -2.4, WV: -2.8, TN: -0.9 };
 
   // Expected overall of an average junior in a program: tradition, size, state and youth program.
   function programTalent(school, facilities) {

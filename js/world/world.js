@@ -1,5 +1,5 @@
 /*
- * Deterministic world generation for Ohio, Kentucky and Tennessee.
+ * Deterministic world generation for Ohio, Michigan, Kentucky, West Virginia and Tennessee.
  * Every school name, location, enrollment, division, region and league is derived from fixed
  * seeds, so the generated state is identical on every load and every new game.
  */
@@ -119,7 +119,11 @@
   /* ------------------------------------------------------------------ */
   /* Schools                                                             */
   /* ------------------------------------------------------------------ */
-  function generateOhio(D, used) {
+  // Place-based states (Ohio, Michigan): every community gets its schools. tag keeps each state's
+  // seeds apart (Ohio's is empty so its schools never change).
+  function generateOhio(D, used, key, tag) {
+    key = key || 'OH';
+    tag = tag || '';
     const namers = makeNamers(D);
     const reserved = new Set(D.cities.map((c) => c.name.toLowerCase()));
     const schools = [];
@@ -133,8 +137,8 @@
       return null;
     };
     const add = (o) => {
-      o.id = 'OH' + String(schools.length + 1).padStart(4, '0');
-      o.state = 'OH';
+      o.id = key + String(schools.length + 1).padStart(4, '0');
+      o.state = key;
       used.add(o.name.toLowerCase());
       schools.push(o);
       return o;
@@ -149,7 +153,7 @@
     };
 
     for (const c of D.cities) {
-      const r = new RNG(SEED + '|city|' + c.name);
+      const r = new RNG(SEED + tag + '|city|' + c.name);
 
       // Public schools
       let nPublic = 1;
@@ -168,6 +172,8 @@
             isLocal = !!name;
           }
           if (!name && !used.has(c.name.toLowerCase())) name = c.name;
+          // Outside Ohio, a town whose name another state already uses keeps it with "High".
+          if (!name && key !== 'OH' && !used.has((c.name + ' High').toLowerCase())) name = c.name + ' High';
         } else {
           name = tryName(r, (rr) => (rr.chance(0.5) ? c.name + ' ' + rr.pick(FNG.DATA.names.dirs) : namers.compound(rr)));
         }
@@ -218,7 +224,7 @@
     for (const c of D.cities) (byCounty[c.county] = byCounty[c.county] || []).push(c);
     for (const county of Object.keys(byCounty).sort()) {
       const places = byCounty[county];
-      const r = new RNG(SEED + '|county|' + county);
+      const r = new RNG(SEED + tag + '|county|' + county);
       const extra = places.length <= 2 ? 2 : places.length <= 4 ? 1 : r.chance(0.25) ? 1 : 0;
       const clat = U.avg(places.map((p) => p.lat));
       const clon = U.avg(places.map((p) => p.lon));
@@ -437,6 +443,77 @@
     return schools;
   }
 
+  /* ------------------------------------------------------------------ */
+  /* West Virginia: county high schools, one per listed community        */
+  /* ------------------------------------------------------------------ */
+  function generateWestVirginia(W, used) {
+    const namers = makeNamers(W);
+    const schools = [];
+    const isFree = (n) => n && !used.has(n.toLowerCase());
+    const tryName = (r, maker, tries = 80) => {
+      for (let i = 0; i < tries; i++) {
+        const n = maker(r);
+        if (isFree(n)) return n;
+      }
+      return null;
+    };
+    const add = (o) => {
+      o.id = 'WV' + String(schools.length + 1).padStart(4, '0');
+      o.state = 'WV';
+      used.add(o.name.toLowerCase());
+      schools.push(o);
+    };
+    const byCounty = {};
+    for (const t of W.towns) (byCounty[t.county] = byCounty[t.county] || []).push(t);
+    for (const c of W.counties) {
+      const towns = byCounty[c.county] || [];
+      const r = new RNG(SEED + '|wv|' + c.county);
+      const weight = towns.map((t) => Math.sqrt(t.pop + 1500));
+      const total = weight.reduce((a, b) => a + b, 0);
+      towns.forEach((t, i) => {
+        // One-school counties play as "<County> County"; small towns sometimes take a valley or area name.
+        let name = null;
+        if (towns.length === 1 && isFree(c.county + ' County')) name = c.county + ' County';
+        else if (t.pop < 3000 && r.chance(0.35)) name = tryName(r, (rr) => namers.local(rr, { name: t.name, county: c.county, lat: t.lat, lon: t.lon }));
+        if (!name) name = [t.name, t.name + ' High', c.county + ' ' + t.name].find(isFree) || tryName(r, namers.compound, 200);
+        add({
+          name, city: t.name, county: c.county,
+          lat: t.lat + r.float(-0.02, 0.02), lon: t.lon + r.float(-0.02, 0.02),
+          type: 'public', kind: 'public',
+          enrollment: Math.round(U.clamp(((c.pop * 0.04 * weight[i]) / total) * r.normal(1, 0.12), 110, 1900)),
+        });
+      });
+      const nPrivate = c.pop >= 80000 ? (r.chance(0.8) ? 1 : 0) + (r.chance(0.4) ? 1 : 0) : c.pop >= 35000 ? (r.chance(0.4) ? 1 : 0) : 0;
+      const hub = towns.slice().sort((a, b) => b.pop - a.pop)[0];
+      for (let i = 0; i < nPrivate && hub; i++) {
+        const kind = r.weighted({ catholic: 5, christian: 3 });
+        const name = tryName(r, (rr) => namers[kind](rr, hub)) || tryName(r, (rr) => namers.christian(rr, hub), 200);
+        if (!name) continue;
+        add({
+          name, city: hub.name, county: c.county,
+          lat: hub.lat + r.float(-0.04, 0.04), lon: hub.lon + r.float(-0.04, 0.04),
+          type: 'private', kind,
+          enrollment: Math.round(U.clamp(kind === 'catholic' ? r.normal(320, 90) : r.normal(180, 60), 90, 700)),
+        });
+      }
+    }
+    assignPrestige(schools);
+    return schools;
+  }
+
+  // Classes of (nearly) equal size by enrollment: division 1 is the largest.
+  function equalCutoffs(list, n) {
+    const sorted = list.slice().sort((a, b) => b.enrollment - a.enrollment || (a.id < b.id ? -1 : 1));
+    const per = sorted.length / n;
+    const cut = [];
+    for (let c = 1; c < n; c++) cut.push(sorted[Math.round(c * per) - 1].enrollment);
+    return cut;
+  }
+  function classOf(enrollment, cut) {
+    for (let i = 0; i < cut.length; i++) if (enrollment >= cut[i]) return i + 1;
+    return cut.length + 1;
+  }
+
   function abbreviate(name) {
     const words = name
       .replace(/^St\.\s*/, 'Saint ')
@@ -524,27 +601,33 @@
       cands.push([v + ' Conference', 3], [v + ' League', 2], [v + ' Athletic Conference', 1.5]);
     }
     const dir = compass(D, lat, lon);
-    cands.push([dir + ' Ohio Conference', 1.5], [dir + ' Ohio Athletic League', 1.5], [dir + ' Ohio League', 1]);
+    const st = D.name;
+    cands.push([dir + ' ' + st + ' Conference', 1.5], [dir + ' ' + st + ' Athletic League', 1.5], [dir + ' ' + st + ' League', 1]);
     for (const g of N.leagueGeneric) cands.push([g, 0.15]);
     const open = cands.filter(([n]) => !usedNames.has(n));
     let name = open.length ? r.weighted(open) : null;
-    if (!name) name = dir + ' Ohio Conference ' + (usedNames.size + 1);
+    if (!name) name = dir + ' ' + st + ' Conference ' + (usedNames.size + 1);
     usedNames.add(name);
     const valley = name.match(/^(.* Valley) /);
     if (valley) usedNames.add('base:' + valley[1]);
     return name;
   }
 
-  function buildLeagues(D, schools) {
-    const r = new RNG(SEED + '|leagues');
+  // opts: { key, prefix, tag, catholicMaxDiv, usedNames } (defaults are Ohio's).
+  function buildLeagues(D, schools, opts) {
+    opts = opts || {};
+    const r = new RNG(SEED + (opts.tag || '') + '|leagues');
     const leagues = [];
-    const usedNames = new Set();
+    const usedNames = opts.usedNames || new Set();
+    const prefix = opts.prefix || 'L';
+    const key = opts.key || 'OH';
+    const maxDiv = opts.catholicMaxDiv || 4;
     const unassigned = new Set(schools.map((s) => s.id));
     const byId = {};
     for (const s of schools) byId[s.id] = s;
 
     const make = (members, name, kind, city) => {
-      const lg = { id: 'L' + String(leagues.length + 1).padStart(3, '0'), name, kind: kind || 'area', members: members.map((s) => s.id) };
+      const lg = { id: prefix + String(leagues.length + 1).padStart(3, '0'), name, kind: kind || 'area', state: key, members: members.map((s) => s.id) };
       if (city) lg.city = city;
       if (!name) lg.name = leagueName(D, members, r, usedNames);
       else usedNames.add(name);
@@ -572,7 +655,7 @@
     // Metro Catholic leagues
     for (const c of D.cities.filter((x) => x.pop >= 250000)) {
       const pool = schools
-        .filter((s) => s.kind === 'catholic' && unassigned.has(s.id) && U.distKm(s, c) < 45 && s.division <= 4)
+        .filter((s) => s.kind === 'catholic' && unassigned.has(s.id) && U.distKm(s, c) < 45 && s.division <= maxDiv)
         .sort((a, b) => U.distKm(a, c) - U.distKm(b, c));
       if (pool.length >= 4) make(pool.slice(0, 8), r.chance(0.5) ? 'Greater ' + c.name + ' Catholic League' : c.name + ' Catholic Conference', 'catholic');
     }
@@ -752,7 +835,8 @@
     const oh = generateOhio(D, used);
     assignDivisions(oh);
     assignRegions(oh, D.center);
-    const ohLeagues = buildLeagues(D, oh);
+    const leagueNames = new Set();
+    const ohLeagues = buildLeagues(D, oh, { usedNames: leagueNames });
     const ohCut = ohioCutoffs(oh);
     for (const s of oh) s.tier = s.division;
     const ky = generateKentucky(K, used);
@@ -772,7 +856,25 @@
       s.region = null;
     }
     const tnLeagues = buildDistricts(T, tn, 'TN', TN_REGIONS);
-    cache = { schools: oh.concat(ky, tn), leagues: ohLeagues.concat(kyLeagues, tnLeagues), ohCut, kyCut, tnCut };
+    const M = FNG.DATA.michigan;
+    const mi = generateOhio(M, used, 'MI', '|mi');
+    const miCut = equalCutoffs(mi, 8);
+    for (const s of mi) {
+      s.division = classOf(s.enrollment, miCut);
+      s.tier = ohioTier(s, ohCut);
+      s.region = null;
+    }
+    const miLeagues = buildLeagues(M, mi, { key: 'MI', prefix: 'M', tag: '|mi', catholicMaxDiv: 5, usedNames: leagueNames });
+    const W = FNG.DATA.westvirginia;
+    const wv = generateWestVirginia(W, used);
+    const wvCut = equalCutoffs(wv, 3);
+    for (const s of wv) {
+      s.division = classOf(s.enrollment, wvCut);
+      s.tier = ohioTier(s, ohCut);
+      s.region = null;
+    }
+    const wvLeagues = buildLeagues(W, wv, { key: 'WV', prefix: 'W', tag: '|wv', catholicMaxDiv: 2, usedNames: leagueNames });
+    cache = { schools: oh.concat(ky, tn, mi, wv), leagues: ohLeagues.concat(kyLeagues, tnLeagues, miLeagues, wvLeagues), ohCut, kyCut, tnCut, miCut, wvCut };
     return U.deepClone(cache);
   }
 
@@ -799,15 +901,21 @@
       school.leagueId = best.id;
       return world;
     }
-    const D = FNG.DATA.ohio;
-    const oh = world.schools.filter((s) => s.state === 'OH');
-    assignDivisions(oh);
-    assignRegions(oh, D.center);
-    for (const s of oh) s.tier = s.division;
+    if (school.state === 'OH') {
+      const D = FNG.DATA.ohio;
+      const oh = world.schools.filter((s) => s.state === 'OH');
+      assignDivisions(oh);
+      assignRegions(oh, D.center);
+      for (const s of oh) s.tier = s.division;
+    } else {
+      school.division = classOf(school.enrollment, school.state === 'MI' ? world.miCut : world.wvCut);
+      school.tier = ohioTier(school, world.ohCut);
+      school.region = null;
+    }
     let best = null;
     let bestScore = Infinity;
     for (const lg of world.leagues) {
-      if (lg.members.length >= 10 || lg.kind === 'district') continue;
+      if (lg.members.length >= 10 || lg.kind === 'district' || (lg.state || 'OH') !== school.state) continue;
       if (lg.kind === 'city' && !(school.type === 'public' && lg.city === school.city)) continue;
       if (lg.kind === 'catholic' && school.type !== 'private') continue;
       const ms = lg.members.map((id) => byId[id]);
@@ -823,31 +931,43 @@
     return world;
   }
 
-  const STATES = ['OH', 'KY', 'TN'];
+  const STATES = ['OH', 'MI', 'KY', 'WV', 'TN'];
+  const STATE_DATA = { OH: 'ohio', MI: 'michigan', KY: 'kentucky', WV: 'westvirginia', TN: 'tennessee' };
+  const ASSOC = { OH: 'OHSAA', MI: 'MHSAA', KY: 'KHSAA', WV: 'WVSSAC', TN: 'TSSAA' };
+  const WV_CLASS = ['AAA', 'AA', 'A'];
   function stateData(key) {
-    return key === 'KY' ? FNG.DATA.kentucky : key === 'TN' ? FNG.DATA.tennessee : FNG.DATA.ohio;
+    return FNG.DATA[STATE_DATA[key] || 'ohio'];
+  }
+  // The state's high school athletic association.
+  function assoc(key) {
+    return ASSOC[key] || key;
   }
 
   function suggestName(stateKey, city, type, attempt) {
-    const namers = makeNamers(FNG.DATA.ohio);
     const D = stateData(stateKey);
+    const namers = makeNamers(D.rivers ? D : FNG.DATA.ohio);
     const c = D.cities.find((x) => x.name === city) || D.cities[0];
     const r = new RNG(SEED + '|suggest|' + stateKey + '|' + city + '|' + type + '|' + attempt);
     if (type === 'private') return namers[r.weighted({ catholic: 5, christian: 3, prep: 2 })](r, c);
     const dir = r.pick(['North', 'South', 'East', 'West', 'Central']);
     if (stateKey === 'KY') return r.pick([dir + ' ' + c.county, c.county + ' County ' + dir, c.name + ' ' + dir, namers.compound(r)]);
     if (stateKey === 'TN') return r.pick([dir + ' ' + c.county, c.county + ' Central', c.name + ' ' + dir, namers.compound(r)]);
+    if (stateKey === 'WV') return r.pick([dir + ' ' + c.county, c.county + ' County ' + dir, c.name + ' ' + dir, namers.local(r, c), namers.compound(r)].filter(Boolean));
     const opts = [c.name + ' ' + dir, namers.local(r, c), namers.compound(r)];
     return r.pick(opts.filter(Boolean));
   }
 
-  // Display helpers shared by both states.
+  // Display helpers shared by every state.
   function divLabel(s) {
     if (s.state === 'TN' && s.division >= 7) return 'Division II-' + TN_DII[s.division - 7];
+    if (s.state === 'MI') return 'Division ' + s.division;
+    if (s.state === 'WV') return 'Class ' + WV_CLASS[s.division - 1];
     return s.state === 'OH' ? 'Division ' + U.roman(s.division) : 'Class ' + (7 - s.division) + 'A';
   }
   function divShort(s) {
     if (s.state === 'TN' && s.division >= 7) return 'II-' + TN_DII[s.division - 7];
+    if (s.state === 'MI') return 'D' + s.division;
+    if (s.state === 'WV') return WV_CLASS[s.division - 1];
     return s.state === 'OH' ? 'D-' + U.roman(s.division) : 7 - s.division + 'A';
   }
   function groupLabel(s) {
@@ -855,11 +975,12 @@
   }
   // Divisions or classes a state's schools are sorted into.
   function divisions(key) {
-    return key === 'OH' ? [1, 2, 3, 4, 5, 6, 7] : key === 'TN' ? [1, 2, 3, 4, 5, 6, 7, 8, 9] : [1, 2, 3, 4, 5, 6];
+    const n = { OH: 7, MI: 8, KY: 6, WV: 3, TN: 9 }[key] || 6;
+    return Array.from({ length: n }, (_, i) => i + 1);
   }
   // What a state calls its conference groupings.
   function leagueWord(key) {
-    return key === 'OH' ? 'League' : key === 'TN' ? 'Region' : 'District';
+    return key === 'OH' ? 'League' : key === 'TN' ? 'Region' : key === 'KY' ? 'District' : 'Conference';
   }
   function stateName(key) {
     return stateData(key).name;
@@ -881,6 +1002,7 @@
     groupLabel,
     divisions,
     leagueWord,
+    assoc,
     STATES,
   };
 })();

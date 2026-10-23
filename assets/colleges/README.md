@@ -1,8 +1,8 @@
 # College logos
 
-Put each college's logo in this folder, named by the college's id. The game looks for `<id>.png` first, then `.svg`, `.webp` and `.jpg`. Square images with transparent backgrounds look best; they are shown from 20px up to 64px.
+Every college in the game has its logo here, named by the college's id. **A college without a logo is not in the game**: to add a college, add its logo here and its row to `js/data/colleges.js`; to remove one, delete both.
 
-A college without a logo file shows a badge in its colors with its abbreviation instead, so the game works with any subset of logos.
+The files are WebP images with a `.png` name, which every modern browser displays. Square images with transparent backgrounds look best; they are shown from 20px up to 64px.
 
 ## Big Ten
 
@@ -33,11 +33,9 @@ A college without a logo file shows a badge in its colors with its abbreviation 
 | --- | --- |
 | Alabama | `alabama.png` |
 | Arkansas | `arkansas.png` |
-| Auburn | `auburn.png` |
 | Florida | `florida.png` |
 | Georgia | `georgia.png` |
 | Kentucky | `kentucky.png` |
-| LSU | `lsu.png` |
 | Mississippi State | `mississippi-state.png` |
 | Missouri | `missouri.png` |
 | Oklahoma | `oklahoma.png` |
@@ -90,6 +88,19 @@ A college without a logo file shows a badge in its colors with its abbreviation 
 | UCF | `ucf.png` |
 | Utah | `utah.png` |
 | West Virginia | `west-virginia.png` |
+
+## Pac-12
+
+| College | File |
+| --- | --- |
+| Boise State | `boise-state.png` |
+| Colorado State | `colorado-state.png` |
+| Fresno State | `fresno-state.png` |
+| Oregon State | `oregon-state.png` |
+| San Diego State | `san-diego-state.png` |
+| Texas State | `texas-state.png` |
+| Utah State | `utah-state.png` |
+| Washington State | `washington-state.png` |
 
 ## Independent
 

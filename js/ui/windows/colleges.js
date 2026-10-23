@@ -1,4 +1,4 @@
-/* Colleges: power conference programs, their recruiting pages, and offer widgets used across the game. */
+/* Colleges: the major college programs, their recruiting pages, and offer widgets used across the game. */
 (function () {
   'use strict';
   const FNG = window.FNG;
@@ -47,7 +47,7 @@
     return h('span', { class: 'row nowrap', style: { gap: '6px' } }, h('b', { class: 'num' }, offers.length), logoStrip(offers, max || 4));
   }
 
-  // Profile card: every power conference offer, other offers and colleges still evaluating the player.
+  // Profile card: every major college offer, other offers and colleges still evaluating the player.
   function offersCard(st, p, s) {
     const offers = Season.collegeOffers(st, p, s);
     const info = Season.recruitInfo(st, p, s);
@@ -57,7 +57,7 @@
       h('div', { class: 'row between' }, h('h3', { class: 'sect', style: { margin: 0 } }, 'College Offers' + (offers.length ? ' · ' + offers.length : '')),
         h('button', { type: 'button', class: 'btn sm ghost', onclick: () => Win.colleges() }, 'All Colleges')));
     if (offers.length) {
-      card.appendChild(h('div', { class: 'small muted', style: { margin: '4px 0 2px' } }, 'Power conference offers, by the player’s interest.'));
+      card.appendChild(h('div', { class: 'small muted', style: { margin: '4px 0 2px' } }, 'Major college offers, by the player’s interest.'));
       offers.forEach((o, i) => card.appendChild(h('div', { class: 'offer-row' },
         collegeLogo(o.college, 'md'),
         h('div', { style: { minWidth: 0 } },
@@ -65,7 +65,7 @@
           h('div', { class: 'tiny muted' }, Colleges.confName(o.college.conf) + ' · ' + o.college.city + ', ' + o.college.state + ' · prestige ' + o.college.prestige + ' · offered ' + offeredWhen(st, o.year, o.week))),
         interestBar(o.interest))));
     } else {
-      card.appendChild(h('p', { class: 'small muted' }, p.year === 4 && st.phase === 'offseason' ? 'No power conference offers.' : 'No power conference offers yet.'));
+      card.appendChild(h('p', { class: 'small muted' }, p.year === 4 && st.phase === 'offseason' ? 'No major college offers.' : 'No major college offers yet.'));
     }
     if (others.length) card.appendChild(h('div', { class: 'small', style: { marginTop: '8px', whiteSpace: 'normal' } }, h('b', null, 'Other offers: '), others.map((o) => o.name + ' (' + Recruits.TIER_NAME[o.tier] + ')').join(', ')));
     if (suitors.length) {
@@ -80,7 +80,7 @@
     const side = (s) => {
       const list = Season.offeredPlayers(st, s);
       const col = h('div', null, h('div', { class: 'row nowrap', style: { gap: '6px', marginBottom: '4px' } }, badge(s, st, 'sm'), h('span', { class: 'bold ellipsis' }, s.name), h('span', { class: 'small muted' }, list.length + ' with offers')));
-      if (!list.length) col.appendChild(h('div', { class: 'small dim' }, 'No power conference offers on this roster.'));
+      if (!list.length) col.appendChild(h('div', { class: 'small dim' }, 'No major college offers on this roster.'));
       for (const x of list.slice(0, 8)) {
         const info = Season.recruitInfo(st, x.p, s);
         col.appendChild(h('div', { class: 'gp' },
@@ -129,7 +129,7 @@
         if (lastSigned) for (const x of st.cr.signed[lastSigned]) signedBy[x[0]] = (signedBy[x[0]] || 0) + 1;
         const rows = Colleges.LIST.filter((c) => S.conf === 'all' || c.conf === S.conf).map((c) => ({ c, n: offerCounts(st, c.id) }));
         body.appendChild(h('p', { class: 'muted small', style: { marginTop: 0 } },
-          'Every Big Ten, SEC, ACC and Big 12 program, plus Notre Dame, recruits the players in the game. Offers update every week from each player’s rating, position, statistics, recent games, potential, recruit ranking, level of competition and location. Prestige sets the level a college recruits at and how far it can reach; lower-prestige programs look harder at developing, local and overlooked players.'));
+          'Every Big Ten, SEC, ACC, Big 12 and Pac-12 program in the game, plus Notre Dame, recruits the players in the game. Offers update every week from each player’s rating, position, statistics, recent games, potential, recruit ranking, level of competition and location. Prestige sets the level a college recruits at and how far it can reach; lower-prestige programs look harder at developing, local and overlooked players.'));
         body.appendChild(h('div', { class: 'toolbar' },
           seg([{ value: 'all', label: 'All' }].concat(FNG.DATA.conferences.map((c) => ({ value: c.id, label: c.id === 'IND' ? 'Notre Dame' : c.name }))), S.conf, (v) => { S.conf = v; WM.refresh(w.id); }),
           h('div', { class: 'grow' }),

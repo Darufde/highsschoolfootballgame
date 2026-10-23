@@ -87,7 +87,7 @@
           { key: 'str', label: 'Str', value: (p) => p.a.str, cls: 'num r' },
           { key: 'awr', label: 'Awr', value: (p) => p.a.awr, cls: 'num r' },
           { key: 'rec', label: 'Recruit', value: (p) => { const i = Season.recruitInfo(st, p); return i ? 10000 - i.rank - (i.classYear - st.year) * 1000 : 0; }, render: (p) => { const i = Season.recruitInfo(st, p); return i ? h('span', { class: 'nowrap' }, stars(i.stars), ' #' + i.rank) : h('span', { class: 'dim' }, '—'); } },
-          { key: 'off', label: 'Offers', value: (p) => (st.cr && st.cr.offers[p.id] ? st.cr.offers[p.id].length : 0), render: (p) => FNG.CollegeView.offersCell(Season.collegeOffers(st, p, Season.user(st)), 3), title: 'Power conference offers' },
+          { key: 'off', label: 'Offers', value: (p) => (st.cr && st.cr.offers[p.id] ? st.cr.offers[p.id].length : 0), render: (p) => FNG.CollegeView.offersCell(Season.collegeOffers(st, p, Season.user(st)), 3), title: 'Major college offers' },
           { key: 'role', label: 'Starting', value: (p) => (starters[p.id] ? 1 : 0), render: (p) => (starters[p.id] ? h('span', { class: 'tag team' }, starters[p.id]) : h('span', { class: 'dim' }, '—')) },
           { key: 'status', label: 'Status', value: (p) => p.injury, render: (p) => (p.injury > 0 ? h('span', { class: 'tag bad' }, 'INJ ' + p.injury + 'w') : h('span', { class: 'tag good' }, 'Healthy')) },
           { key: 'level', label: 'Team', value: (p) => Players.LEVELS.indexOf(p.level), render: (p) => levelSelect(st, p), sortable: true },
@@ -158,7 +158,7 @@
               info ? h('div', null,
                 h('div', { class: 'row', style: { gap: '8px' } }, stars(info.stars), h('b', null, '#' + info.rank + ' in the class of ' + info.classYear), FNG.RecruitView.moveTag(info.move)),
                 h('div', { class: 'small muted', style: { marginTop: '4px' } }, 'Rating ' + info.score.toFixed(1) + (st.perf[p.id] ? ' · ' + FNG.Recruits.statLine(p, st.perf[p.id]) : '')),
-                h('div', { class: 'small', style: { marginTop: '6px' } }, info.offers.length ? h('span', null, h('b', null, info.offers.length + ' power conference offer' + (info.offers.length > 1 ? 's' : '') + ' '), FNG.CollegeView.logoStrip(info.offers, 8)) : 'No power conference offers yet.'))
+                h('div', { class: 'small', style: { marginTop: '6px' } }, info.offers.length ? h('span', null, h('b', null, info.offers.length + ' major college offer' + (info.offers.length > 1 ? 's' : '') + ' '), FNG.CollegeView.logoStrip(info.offers, 8)) : 'No major college offers yet.'))
                 : h('div', null, h('div', { class: 'bold' }, 'Not ranked'), h('div', { class: 'help' }, outlook.label + '. Production, development and varsity snaps can move a player into the rankings.')),
               h('button', { type: 'button', class: 'btn sm mt', onclick: () => Win.recruits({ team: st.userId }) }, 'Recruit Rankings')),
             FNG.CollegeView.offersCard(st, p, Season.user(st)),
